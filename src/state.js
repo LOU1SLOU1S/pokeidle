@@ -454,7 +454,7 @@ export function dexShinyOwned(idx) {
 }
 
 // 把一只刚获得的宝可梦加入仓库（捕获/孵蛋/交换时调用）
-export function addRosterEntry({ species, shiny = false, source = 'normal', level = 1, gender, ivs, variant }) {
+export function addRosterEntry({ species, shiny = false, source = 'normal', level = 1, gender, ivs, variant, at = 0 }) {
   if (!gameData) return null;
   markDexOwned(species, !!shiny); // 任何来源获得即解锁图鉴
   if (!Array.isArray(gameData.roster)) gameData.roster = [];
@@ -474,7 +474,7 @@ export function addRosterEntry({ species, shiny = false, source = 'normal', leve
     nature: rollNature(),
     source,
     variant: variant || null, // 外观变体：'rgb' 污染等（仅外观，功能等同普通宝可梦）
-    obtainedAt: Date.now(),
+    obtainedAt: at || simNow(), // 显式时间优先；补算期间按模拟时刻写
     inRoster: true,
   };
   gameData.roster.push(entry);
@@ -498,9 +498,15 @@ export function getLastObtainedEntryId() { return _lastObtainedEntryId; }
 export function setLastObtainedEntryId(id) { _lastObtainedEntryId = id; }
 
 // ---------- 系统日志 ----------
-export function addSystemLog(type, details) {
+// 补算期间的"模拟时钟"：把补算产出的记录写成"挂机期间该发生的那一刻"，
+// 而不是回前台那一刻——否则系统日志里一串记录挤在同一秒，看着像凭空冒出来的
+let _simClock = 0;
+export function setSimClock(at) { _simClock = at > 0 ? at : 0; }
+export const simNow = () => _simClock || Date.now();
+
+export function addSystemLog(type, details, at = 0) {
   if (!gameData.systemLogs) gameData.systemLogs = [];
-  gameData.systemLogs.push({ time: Date.now(), type, details });
+  gameData.systemLogs.push({ time: at || simNow(), type, details });
   if (gameData.systemLogs.length > 50) {
     gameData.systemLogs = gameData.systemLogs.slice(-50);
   }

@@ -1369,9 +1369,13 @@ function crownWho(entry) {
 }
 
 let _crownPanelDoc = null; // 点面板外关闭的文档监听：打开时挂、关闭时摘
+let _crownPanel = null;    // 面板元素：用掉王冠后**原地重绘**，不拆不重建——重建会重播上滑动画、还会丢滚动位置
+let _crownFlash = [];      // 刚练满的维度：重绘时闪一下，替代"用一次弹一次框"
 function closeCrownPanel() {
-  document.getElementById('crownPanel')?.remove();
+  _crownPanel?.remove();
+  _crownPanel = null;
   if (_crownPanelDoc) { document.removeEventListener('click', _crownPanelDoc); _crownPanelDoc = null; }
+  hideConfirmBar(); // 面板关了，挂在它上面的确认条一并作废（不然按了确定没面板可刷，还会用掉王冠）
 }
 
 // 用掉一顶王冠：silver 只练 stat 一维，gold 练六维；没有可练的维度（或没库存）返回 false
@@ -1387,20 +1391,18 @@ function useCrown(entry, key, stat) {
   return true;
 }
 
-// 王冠面板：每维一行（名字 / 进度条 / 数值 / 银色王冠按钮），底部一个金色王冠按钮。
+// 面板内容：顶部持有数 + 每维一行（名字 / 进度条 / 数值 / 银色王冠按钮）+ 底部金色王冠按钮。
 // 已满维的银色按钮、六维全满的金色按钮都置灰
-function openCrownPanel() {
-  const view = $('rosterView');
-  const entry = (gameData.roster || []).find(r => r.id === _detailId);
-  if (!view || !entry) return;
-  closeCrownPanel();
+function crownPanelHtml(entry) {
+  const flash = _crownFlash;
+  _crownFlash = [];
   const silver = gameData.items[CROWN_SILVER] || 0;
   const gold = gameData.items[CROWN_GOLD] || 0;
   const rows = IV_KEYS.map(([k, label]) => {
     const v = ivOf(entry, k);
     const maxed = v >= 31;
     const can = !maxed && silver > 0;
-    return `<div class="crown-row">
+    return `<div class="crown-row${flash.includes(k) ? ' just' : ''}">
       <span class="crown-name">${label}</span>
       <div class="roster-iv-bar"><div class="roster-iv-fill" style="width:${(v / 31 * 100).toFixed(0)}%"></div></div>
       <span class="crown-val${maxed ? ' maxed' : ''}">${v}</span>
@@ -1408,10 +1410,7 @@ function openCrownPanel() {
     </div>`;
   }).join('');
   const allMaxed = IV_KEYS.every(([k]) => ivOf(entry, k) >= 31);
-  const panel = document.createElement('div');
-  panel.id = 'crownPanel';
-  panel.className = 'berry-picker berry-board'; // 复用告示牌/种子选择那套上浮框
-  panel.innerHTML = `<div class="berry-picker-head">
+  return `<div class="berry-picker-head">
       <span class="berry-picker-title">使用王冠</span>
       <div class="berry-picker-x" data-crown-close>✕</div>
     </div>
@@ -1426,6 +1425,30 @@ function openCrownPanel() {
         <button class="crown-btn crown-gold" data-crown-gold${(!allMaxed && gold > 0) ? '' : ' disabled'}><img src="${itemIconSrc(CROWN_GOLD)}" alt=""><span>使用金色王冠 · 六项练满</span></button>
       </div>
     </div>`;
+}
+
+// 原地重绘：滚动条在 .berry-board-sections 上，读出来再写回去，不然用一顶就跳回顶部
+function paintCrownPanel(entry) {
+  if (!_crownPanel?.isConnected) return; // 面板已被关掉：不画了，数值已落库、详情页自己会刷新
+  const scroller = _crownPanel.querySelector('.berry-board-sections');
+  const top = scroller ? scroller.scrollTop : 0;
+  _crownPanel.innerHTML = crownPanelHtml(entry);
+  const next = _crownPanel.querySelector('.berry-board-sections');
+  if (next) next.scrollTop = top;
+}
+
+// 王冠面板：用掉一顶后面板不关（常有连着练两维的需求），只原地重绘 + 闪一下刚变的那一行
+function openCrownPanel() {
+  const view = $('rosterView');
+  const entry = (gameData.roster || []).find(r => r.id === _detailId);
+  if (!view || !entry) return;
+  if (_crownPanel?.isConnected) { paintCrownPanel(entry); return; } // 已经开着：原地刷新，不重播动画
+  closeCrownPanel();
+  const panel = document.createElement('div');
+  panel.id = 'crownPanel';
+  panel.className = 'berry-picker berry-board'; // 复用告示牌/种子选择那套上浮框
+  _crownPanel = panel;
+  panel.innerHTML = crownPanelHtml(entry);
   (view.closest('.screen') || view).appendChild(panel);
   panel.onclick = (e) => {
     if (e.target.closest('[data-crown-close]') || e.target === panel) { closeCrownPanel(); return; }
@@ -1436,9 +1459,9 @@ function openCrownPanel() {
       const who = crownWho(entry);
       showConfirmBar(`用「${CROWN_SILVER}」，把${who}的${label}练到 31？`, () => {
         if (!useCrown(entry, CROWN_SILVER, k)) return;
-        closeCrownPanel();
+        _crownFlash = [k];
         showRosterDetail(_detailId); // 就地刷新详情（数值与持有数量都变了）
-        showConfirmBar(`${who}的${label}练到 31 了`, null, null, { singleButton: true });
+        paintCrownPanel(entry); // 面板原地刷新，保留滚动位置
       }, null, { overlay: true });
       return;
     }
@@ -1447,14 +1470,18 @@ function openCrownPanel() {
       const who = crownWho(entry);
       showConfirmBar(`用「${CROWN_GOLD}」，把${who}的六项个体值全部练到 31？`, () => {
         if (!useCrown(entry, CROWN_GOLD)) return;
-        closeCrownPanel();
+        _crownFlash = IV_STATS.slice();
         showRosterDetail(_detailId);
-        showConfirmBar(`${who}的六项个体值全部练到 31 了`, null, null, { singleButton: true });
+        paintCrownPanel(entry);
       }, null, { overlay: true });
     }
   };
-  // 点面板外的空白也关掉（打开那次点击已在入口 stopPropagation，不会立刻触发）
-  _crownPanelDoc = (ev) => { if (!panel.contains(ev.target)) closeCrownPanel(); };
+  // 点面板外的空白也关掉（打开那次点击已在入口 stopPropagation，不会立刻触发）；
+  // 确认条弹出期间点哪都不收面板——那一下属于这次操作的流程，收了面板就只剩一个悬空的确认条
+  _crownPanelDoc = (ev) => {
+    if (document.getElementById('confirmBar')) return;
+    if (!panel.contains(ev.target)) closeCrownPanel();
+  };
   document.addEventListener('click', _crownPanelDoc);
 }
 
