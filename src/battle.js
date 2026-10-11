@@ -621,11 +621,15 @@ export function restoreWildEncounter(rec, gapSecs = 0) {
   return true;
 }
 
+// 每次遭遇都要重掷性别（同一遭遇内固定，供名字/"着迷"等性别机制使用）。
+// 必须两边都调：showEncounter 管正常遭遇，后台补算不走它——只在 showEncounter 里掷的话，
+// 补算出的宝可梦会沿用上一只的性别（上一只是无性别宝可梦时，下一只就跟着变成无性别）
+function rollEncounterGender(poke) { _encounterGender = rollGender(poke.index); }
+
 // ===== 显示遇敌 =====
 export function showEncounter(poke, opts = {}) {
   playBattle(); // 进入战斗 → 切换为战斗曲（覆盖地区曲）
-  // 每次遇敌 roll 定性别（同一遭遇内固定，供名字/后续"着迷"等性别机制使用）
-  _encounterGender = rollGender(poke.index);
+  rollEncounterGender(poke);
   // 兼容旧调用 showEncounter(poke, true)：第二个参数传 true 表示跳过自动操作
   const skipAuto = opts === true || !!opts.skipAuto;
   const msg = opts && typeof opts === 'object' ? (opts.message || null) : null;
@@ -1447,6 +1451,7 @@ export async function catchUpEncounters(secs, buffRemainingMs) {
       setSimClock(startAt + Math.round(i * stepMs));
       const poke = resolveEncounterPoke();
       if (!poke) break;
+      rollEncounterGender(poke); // 补算不走 showEncounter，这里必须自己掷
       const ballsBefore = gameData.stats.totalBallsUsed;
       const catchesBefore = gameData.stats.totalCatches;
       const shiny = currentIsShiny;

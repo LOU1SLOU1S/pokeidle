@@ -1,7 +1,7 @@
 // ===== 宝可梦仓库 =====
 // 查看当前拥有的每只宝可梦个体（个体值/闪光/来源/在仓状态），
 // 交互与图鉴对齐：搜索 / 来源筛选 / 表头排序 / 点击进入个体详情，详情页可返回列表。
-import { $, showView, getCurrentView, tryLoadImage, tryLoadPokemonImage, showConfirmBar, hideConfirmBar, updateBackpack, updateStats, logicViewport, viewportToLogic, popupBounds, isDualLayout, isStageView, closeAppArea } from './ui.js';
+import { $, showView, getCurrentView, tryLoadImage, tryLoadPokemonImage, showConfirmBar, hideConfirmBar, updateBackpack, updateStats, logicViewport, viewportToLogic, popupBounds, isDualLayout, isStageView, closeAppArea, watchOutsidePress } from './ui.js';
 import { gameData, allPokemon, getPokemonByIndex, isTmUnlocked, getNature, pushNav, resetNav, saveGame, addSystemLog, setPokedexInLogView, ensureGender, genderBadge, isPokemon, phase, dexUnlocked, ivOf, effIvTotal, effPerfectCount, applyCrown, IV_STATS } from './state.js';
 import { TYPE_COLORS, typeIconColor, pokemonSourceBadge, itemIconSrc, MINT_KEYS } from './items.js';
 import { evolutionRows, applyEvolution, condItems, moveCondText, evoPreEvos, evolutionData, loadEvolution } from './evolution.js';
@@ -992,8 +992,8 @@ function showMoveSortMenu(x, y) {
   const b = popupBounds(); // 夹紧在机身内：手游双屏下机身只占屏幕中间一块
   menu.style.left = Math.max(b.left, Math.min(lx - 24, b.right - mw - 4)) + 'px';
   menu.style.top = Math.max(b.top, Math.min(ly, b.bottom - mh - 4)) + 'px';
-  // 菜单内点击不触发外部关闭；点击外部任意位置关闭
-  menu.addEventListener('pointerdown', (e) => e.stopPropagation());
+  _sortUnwatch?.();
+  _sortUnwatch = watchOutsidePress(menu, hideMoveSortMenu);
   menu.onclick = (e) => {
     const opt = e.target.closest('.shop-ctx-item');
     if (!opt) return;
@@ -1001,12 +1001,13 @@ function showMoveSortMenu(x, y) {
     _moveSort = opt.dataset.sort;
     renderMoveEditor();
   };
-  document.addEventListener('pointerdown', hideMoveSortMenu);
 }
+let _sortUnwatch = null; // 同上：候选排序菜单
 function hideMoveSortMenu() {
   const menu = $('moveSortCtxMenu');
   if (menu) menu.style.display = 'none';
-  document.removeEventListener('pointerdown', hideMoveSortMenu);
+  _sortUnwatch?.();
+  _sortUnwatch = null;
 }
 
 export function renderMoveEditor() {
@@ -2067,12 +2068,16 @@ function showContextMenu(x, y) {
     if (act === 'advFilter') openAdvFilter();
     else if (act === 'batchRelease') startBatchRelease();
   };
-  setTimeout(() => document.addEventListener('click', hideContextMenu, { once: true }), 0);
+  _ctxUnwatch?.();
+  _ctxUnwatch = watchOutsidePress(menu, hideContextMenu);
 }
 
+let _ctxUnwatch = null; // 点外面收菜单的解绑函数（每次弹出重新挂）
 function hideContextMenu() {
   const menu = document.getElementById('rosterCtxMenu');
   if (menu) menu.style.display = 'none';
+  _ctxUnwatch?.();
+  _ctxUnwatch = null;
 }
 
 function startBatchRelease() {
