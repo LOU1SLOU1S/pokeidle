@@ -52,6 +52,8 @@ html, body {
   height: 100%; width: 100%; overflow: hidden;
   font-family: 'Segoe UI', system-ui, sans-serif;
   font-size: 13px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   color: var(--color-text);
   background: var(--console-body);
 }
@@ -11057,24 +11059,28 @@ html.ui-mobile .app-host {
   height: 100%;
 }
 /* 底部入口行：长条按钮，底色与背包格子一致 */
-html.ui-mobile .title-bar { padding: 1px 10px 0; }
+html.ui-mobile .title-bar { padding: 1px 6px 0; }
+html.ui-mobile .window-controls { gap: 2px; }
 html.ui-mobile .control-btn {
-  flex: 1;
+  flex: 1 1 0;
+  /* min-width:0：这一行放不下时让按钮自己压缩，而不是把标签顶成两行 */
+  min-width: 0;
   width: auto;
   height: 30px;
-  padding: 0 3px;
+  padding: 0 2px;
   flex-direction: row;
-  gap: 4px;
+  gap: 3px;
   border-radius: 4px;
   background: rgba(0,0,0,0.03);
   color: var(--ui-color);
-  font-size: 11px;
+  font-size: 10px;
 }
 [data-theme="dark"] html.ui-mobile .control-btn { background: var(--item-bg); }
 html.ui-mobile .control-btn.window-icon { opacity: 1; } /* 实底按钮不透明 */
-html.ui-mobile .control-btn svg { width: 14px; height: 14px; }
+html.ui-mobile .control-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
 html.ui-mobile .control-btn.active { background: rgba(var(--ui-color-rgb), 0.14); }
-html.ui-mobile .nav-label { display: inline; }
+/* 标签一律不换行：真的挤不下就省略号截断，绝不把这一行顶成两行 */
+html.ui-mobile .nav-label { display: inline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 下屏（应用屏）自己的文字框：手机 app 的提示/文案走这里，不再打到上屏的遭遇文字框。
    经典布局只有一个屏，app 文案仍走 #textBox，所以这里默认不显示 */
