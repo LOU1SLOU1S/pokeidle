@@ -5259,6 +5259,52 @@ html.mobile-app #quitHide { display: none !important; }
   .mint-row:hover { background: rgba(var(--ui-color-rgb), 0.1); }
 }
 .mint-empty { padding: 10px 6px; font-size: 10px; color: var(--ui-color); opacity: 0.6; text-align: center; }
+
+/* 详情页「个体值」标题：与性格行同一道门，从宝可梦列表进来的详情可点开王冠面板 */
+.roster-detail-title.can-use { display: inline-block; padding: 0 2px; margin: 0 -2px; border-radius: 3px; cursor: pointer; }
+.roster-detail-title.can-use:hover { background: rgba(var(--ui-color-rgb), 0.14); }
+.roster-detail-title.can-use:active { transform: scale(0.98); }
+/* 使用王冠弹层：外形复用薄荷那套上浮框，行内是 名字 / 进度条 / 数值 / 银色王冠按钮 */
+/* 顶部持有数：只留图标 + 数字（图标与下面各行的按钮同款，一眼对得上）；按钮上不写数量，免得像"一次消耗两个" */
+.crown-have { display: flex; gap: 14px; padding: 2px 8px 4px; font-size: 10px; font-weight: 700; color: var(--ui-color); opacity: 0.85; }
+.crown-have span { display: inline-flex; align-items: center; gap: 3px; }
+.crown-have img { width: 14px; height: 14px; image-rendering: pixelated; }
+.crown-list { padding: 0 0 4px; }
+.crown-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 20px auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ui-color);
+}
+.crown-row .roster-iv-bar { height: 4px; }
+.crown-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crown-val { text-align: right; font-variant-numeric: tabular-nums; }
+.crown-val.maxed { opacity: 0.5; }
+.crown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--ui-color-rgb), 0.35);
+  background: rgba(var(--ui-color-rgb), 0.08);
+  color: var(--ui-color);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+.crown-btn img { width: 15px; height: 15px; image-rendering: pixelated; }
+.crown-btn:disabled { opacity: 0.32; cursor: default; }
+.crown-gold-row { padding: 6px 6px 2px; }
+.crown-gold { width: 100%; justify-content: center; padding: 5px 8px; }
+@media (hover: hover) {
+  .crown-btn:not(:disabled):hover { background: rgba(var(--ui-color-rgb), 0.16); }
+}
 .roster-detail-title {
   font-size: 10px;
   font-weight: 700;
@@ -5752,6 +5798,8 @@ html.mobile-app #quitHide { display: none !important; }
   line-height: 1.5;
   word-break: break-all;
 }
+/* 可培养提示：紧跟在需求下面一行，写明要准备什么道具（经验糖果 ×N / 王冠 ×1） */
+.trade-cult { display: block; font-size: 9px; opacity: 0.72; }
 /* 给出宝可梦入口：小图标，点击进入详情页 */
 .trade-give {
   flex: none;

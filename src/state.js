@@ -334,6 +334,36 @@ export function rollGuaranteedIvs(n) {
   return ivs;
 }
 
+// ---------- 个体值：原始值 / 有效值（王冠）----------
+// 存档里的 ivs 永远是「原始值」= 血统值：繁育遗传、后代预览、配对筛选、欧气评分都只认它。
+// 银色/金色王冠把个体练到 31 只改「有效值」（详情页、战斗、派遣、交换需求这些使用口径），
+// 记在条目的 ivCrown 里（{ hp: true, spe: true }，没用过王冠的个体没有这个字段）。
+export const IV_STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+
+export const ivOf = (p, k) => (p && p.ivCrown && p.ivCrown[k] ? 31 : (p?.ivs?.[k] ?? 0));
+export const effIvs = (p) => {
+  const out = {};
+  for (const k of IV_STATS) out[k] = ivOf(p, k);
+  return out;
+};
+export const effIvTotal = (p) => IV_STATS.reduce((s, k) => s + ivOf(p, k), 0);
+export const effPerfectCount = (p) => IV_STATS.filter((k) => ivOf(p, k) >= 31).length;
+
+// 极限特训：把 stats 里还不到 31 的维度练满，返回真正练上的维度（用于日志与提示）
+export function applyCrown(entry, stats) {
+  if (!entry || !entry.ivs) return [];
+  const done = [];
+  for (const k of stats) {
+    if (!IV_STATS.includes(k)) continue;
+    if ((entry.ivs[k] ?? 0) >= 31 || entry.ivCrown?.[k]) continue;
+    if (!entry.ivCrown) entry.ivCrown = {};
+    entry.ivCrown[k] = true;
+    done.push(k);
+  }
+  if (done.length) addSystemLog('crown_use', { pokemon: entry.species, stats: done });
+  return done;
+}
+
 // ---------- 性格 ----------
 // 25 种性格：key（存档用）→ 中文名（展示用）
 export const POKEMON_NATURES = [
