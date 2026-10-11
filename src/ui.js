@@ -124,6 +124,8 @@ function dismissConfirmBarForView(id) {
 
 export function showView(id) {
   dismissConfirmBarForView(id);
+  // 导入存档的对比框只属于设置页：切走时收掉，别浮在新页面上
+  if (id !== 'settingsView') document.getElementById('importCmpDialog')?.remove();
   if (id === 'idleView' && phase === 'encounter') {
     id = 'encounterView';
   }
