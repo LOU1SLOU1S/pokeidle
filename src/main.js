@@ -2,7 +2,7 @@
 // 禁用全局右键菜单（桌面端 webview 的原生右键菜单）
 document.addEventListener('contextmenu', e => e.preventDefault());
 import { CATCH_RATES, SAVE_INTERVAL, ITEM_RATES, ITEM_NAMES, ROAD_SPECIAL_CHANCE, ROAD_WIDTH_MIN, ROAD_WIDTH_MAX, ROAD_SWITCH_CYCLES, BIKE_RESTORE_MAX_GAP_MS, PX_PER_METER } from './config.js';
-import { allPokemon, gameData, phase, honeyBuffActive, charmBuffActive, honeyCountdownEnd, charmCountdownEnd, _autoCatching, _pokedexInLogView, _lastRegionId, gameTick, _fishing, setAllPokemon, setGameData, setPhase, setCurrentEncounter, setCurrentIsShiny, setEncounterBallsUsed, setCurrentEncounterBalls, setGameTick, pushNav, popNav, resetNav, setLastRegionId, setIdleMsgIdx, setCatchConfirmStep, setBlockBuffActive, setBlockRecipe, setBlockStartWalk, setBlockQuality, setQteState, getDefaultSave, saveGame, getPokemonByIndex, ensureGpsState, restoreSessionState, calcOffline, addSystemLog, getCurrentRegion, getLastObtainedEntryId, saveSessionState, setEncounterMsg, addPlaySeconds, inMassZone, inTwistZone, setEncounterSource, setEncounterVariant, nextEncounterTimer , setSimClock  } from './state.js';
+import { allPokemon, gameData, phase, currentEncounter, honeyBuffActive, charmBuffActive, honeyCountdownEnd, charmCountdownEnd, _autoCatching, _pokedexInLogView, _lastRegionId, gameTick, _fishing, setAllPokemon, setGameData, setPhase, setCurrentEncounter, setCurrentIsShiny, setEncounterBallsUsed, setCurrentEncounterBalls, setGameTick, pushNav, popNav, resetNav, setLastRegionId, setIdleMsgIdx, setCatchConfirmStep, setBlockBuffActive, setBlockRecipe, setBlockStartWalk, setBlockQuality, setQteState, getDefaultSave, saveGame, getPokemonByIndex, ensureGpsState, restoreSessionState, calcOffline, addSystemLog, getCurrentRegion, getLastObtainedEntryId, saveSessionState, setEncounterMsg, addPlaySeconds, inMassZone, inTwistZone, setEncounterSource, setEncounterVariant, nextEncounterTimer , setSimClock  } from './state.js';
 import { migrateEncounterScores } from './scoring.js';
 import { massTick, ensureMassInit as ensureMassInitEvents, twistTick, ensureTwistInit } from './events.js';
 import { $, showView, updateTextBox, showConfirmBar, isIdleStageVisible, isPageHidden, applyUiMode, getUiMode, isUiMobile, isDualLayout, isStageView, getAppChannelView, closeAppArea, applyCharSprites, updateBackpack, updateStats, setIdleCharacter, renderIncubatorView, updateIncubatorTimers, updateIncubatorBadge, setupFoodTooltip, isIncubatorLogOpen, closeIncubatorLog, closeIncubatorEggView } from './ui.js';
@@ -390,6 +390,17 @@ async function onGameTick() {
     gpsAddDistance(walked);
   }
 
+
+  // 兜底自愈：遭遇态还在、遭遇对象却已经没了 → 说明收尾漏了，清掉它。
+  // 不清就会卡死遇敌调度（调度那边只认"挂机中"）
+  if (encState() && !currentEncounter) import('./battle.js').then((m) => m.setEncPhase(null));
+
+  // 兜底自愈：战斗中遭遇已收尾（遭遇态清空），上屏却还停在遭遇画面
+  // （表现是没贴图、也没文字框）→ 自己切回挂机，不用等玩家点任何按钮
+  if (phase === 'battle' && !encState() && $('encounterView')?.style.display !== 'none') {
+    import('./ui.js').then((m) => m.showView('idleView'));
+  }
+
   const region = getCurrentRegion();
   if (region.id !== _lastRegionId) {
     setLastRegionId(region.id);
@@ -426,7 +437,19 @@ async function onGameTick() {
   // 否则系统日志/相遇日志里会写成回前台的时间，和相遇时刻差几十分钟
   if (phase !== 'idle') {
     const gap = bgPeekAccum();
-    if (gap > 0) setEncounterAt(Date.now() - gap * 1000);
+    if (gap > 0) {
+      setEncounterAt(Date.now() - gap * 1000);
+      // 压屏的遭遇要玩家亲自处理（手动/暂停）：这窗口主角一直卡着，记账丢掉别等处理完再补
+      const autoHandled = gameData.settings?.autoCatch
+        ? catchFilterResult() !== 'stop'
+        : !!gameData.settings?.autoFlee;
+      if (bgCatchupEnabled() && !autoHandled) {
+        bgTakeAccum();
+        road.takeAfkSeconds();
+        bgTakeBike();
+        bgTakeBuffRemainingMs();
+      }
+    }
     updateStats();
     return;
   }
@@ -440,13 +463,26 @@ async function onGameTick() {
   const afkSec = bgCatchupEnabled() ? Math.max(bgTakeAccum(), road.takeAfkSeconds()) : 0;
   // 骑行停摆期间不产生掉落/遭遇（骑行不遇敌、不拾取），里程仍按骑行速度补算：
   // 只把行走时段的停摆秒数计入掉落/遭遇补算，避免骑行结束瞬间的骑行秒数被误补
-  const idleAfkSec = bgTakeBike() ? 0 : afkSec;
+  const idleAfkSecRaw = bgTakeBike() ? 0 : afkSec;
   let catchUpLog = null; // 补发汇总：后台挂机补算时打印控制台便于核对
+  if (afkSec > 0) catchUpLog = { afkSec: Math.round(afkSec), walk: 0, items: {} };
+  // 遇敌补算先跑：撞上"暂停"就停在那只上，里程与掉落也按 stalledSec 截到暂停为止
+  let grantSec = afkSec;
+  let idleAfkSec = idleAfkSecRaw;
+  if (catchUpLog) {
+    const enc = await catchUpEncounters(idleAfkSecRaw, bgTakeBuffRemainingMs());
+    if (enc) {
+      catchUpLog.enc = enc;
+      if (enc.stalledSec != null) {
+        grantSec = Math.min(grantSec, enc.stalledSec);
+        idleAfkSec = Math.min(idleAfkSec, enc.stalledSec);
+      }
+    }
+  }
   if (afkSec > 0) {
-    catchUpLog = { afkSec: Math.round(afkSec), walk: 0, items: {} };
     // 按当前步速（px/秒）折算里程，与前台推进速率一致
     const spd = road.getPxPerSec();
-    const extraWalk = Math.floor(spd * afkSec);
+    const extraWalk = Math.floor(spd * grantSec);
     if (extraWalk > 0) {
       gameData.stats.walkDistance = (gameData.stats.walkDistance || 0) + extraWalk;
       gpsAddDistance(extraWalk);
@@ -533,7 +569,7 @@ async function onGameTick() {
           for (let i = 0; i < gained; i++) {
             gainedQty += (item === 'candy' ? rollCandyMult() : 1) + extraDropQty(item);
           }
-          setSimClock(Date.now() - idleAfkSec * 1000); // 补发的掉落记在停摆窗口起点，别挤在回前台那一秒
+          setSimClock(Date.now() - idleAfkSecRaw * 1000); // 补发的掉落记在停摆窗口起点，别挤在回前台那一秒
           grantItem(item, gainedQty);
           setSimClock(0);
           gameData[key] -= gained;
@@ -559,10 +595,8 @@ async function onGameTick() {
   // 避免 30 秒周期存档前刷新/切走导致本次补发的道具丢失
   if (catchUpLog && Object.keys(catchUpLog.items).length > 0) saveGame();
 
-  // 后台挂机补发汇总：遇敌补算为异步批量结算，完成后并入一并打印，便于核对每类补算了多少
+  // 后台挂机补发汇总：遇敌补算在里程/掉落之前已跑完，这里只把每类补算了多少打印一行便于核对
   if (catchUpLog) {
-    const enc = await catchUpEncounters(idleAfkSec, bgTakeBuffRemainingMs());
-    if (enc) catchUpLog.enc = enc;
     const parts = [`挂机补发 ${catchUpLog.afkSec}s`];
     if (catchUpLog.walk > 0) parts.push(`里程 +${Math.round(catchUpLog.walk / PX_PER_METER)}m`);
     const itemNames = Object.keys(catchUpLog.items);
@@ -861,6 +895,7 @@ async function init() {
   restoreMusicMode(); // 音乐点播：沿用上次选中的歌单（当前地区 / 某一世代 / 我的喜爱）
   startTelemetry(); // 匿名在线统计
   // 后台常驻：上次开着就恢复（只有安卓包带这个能力，其它平台静默跳过）
+  // 常驻通知只做"服务在运行"的标记，不报游戏状态：切后台 JS 被冻结，报出来的都是旧值
   if (gameData.settings?.backgroundService) window.__POKEIDLE_MOBILE__?.foregroundStart?.().catch(() => {});
   setSfxEnabled(gameData.settings?.sfxEnabled !== false); // 音效开关：沿用上次状态
   ensureBounty();   // 生成/恢复当日地区悬赏
@@ -1418,6 +1453,8 @@ async function init() {
       return ms;
     },
     onHidden: () => settleEncounterForBackground(),
+    // 回前台：屏幕上还压着遭遇就按当前模式结掉，手动/暂停由内部守卫跳过
+    onShown: () => settleEncounterForBackground().catch(() => {}),
   });
   startBackgroundCatchup();
 

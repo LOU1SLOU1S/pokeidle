@@ -8,6 +8,7 @@ import { setVolume, setBattleMusic, setMusicEnabled, setSfxEnabled, playBattle, 
 import { renderAchievements, refreshAchievements } from './achievements.js';
 import { TEAM_MAX } from './team.js';
 import { clearBattleTier } from './battle-view.js';
+import { APP_VERSION, BUILD_STAMP } from './build-info.js';
 
 // ===== 欧气综合评定 =====
 // 取"最好的那一批场次"的平均分（前 10%，至少 10 场）映射到 9 档称号。
@@ -1083,16 +1084,7 @@ export function renderSettings(container, s) {
           </div>
         </div>
         <div class="cf-hint" style="padding:0 4px 4px;">遇敌后 30 秒未处理宝可梦会自动逃跑，防止挂机进度卡住</div>
-        ${window.__POKEIDLE_MOBILE__?.foregroundStart ? `
-        <div class="auto-catch-row">
-          <div class="auto-catch-label">后台常驻</div>
-          <div class="toggle-switch" id="toggleBackground">
-            <div class="toggle-track ${backgroundService ? 'on' : ''}"></div>
-            <div class="toggle-knob"></div>
-          </div>
-        </div>
-        <div class="cf-hint" style="padding:0 4px 4px;">开启后下拉通知栏会常驻一条通知，系统不会随便清掉后台</div>
-        ` : ''}
+
       </div>
 
       <div class="settings-group">
@@ -1178,6 +1170,20 @@ export function renderSettings(container, s) {
           </div>
         </div>
       </div>
+
+      ${window.__POKEIDLE_MOBILE__?.foregroundStart ? `
+      <div class="settings-group">
+        <div class="settings-group-title">后台常驻</div>
+        <div class="auto-catch-row">
+          <div class="auto-catch-label">常驻通知</div>
+          <div class="toggle-switch" id="toggleBackground">
+            <div class="toggle-track ${backgroundService ? 'on' : ''}"></div>
+            <div class="toggle-knob"></div>
+          </div>
+        </div>
+        <div class="cf-hint" style="padding:0 4px 4px;">开启后系统不会随便清掉后台；</div>
+      </div>
+      ` : ''}
 
       <div class="settings-group">
         <div class="settings-group-title">角色与存档</div>
@@ -1449,6 +1455,12 @@ export function renderSettings(container, s) {
     });
   }
   function doApplyImportedSave(imported, importedTime, currentTime, btn) {
+    // 旧档的会话状态不属于新档：正在进行的遭遇、当前道路都要清掉，
+    // 否则重载后新档会"在关都继承一场丰缘的遭遇"
+    try {
+      localStorage.removeItem('pokemon_idle_session');
+      localStorage.removeItem('pokemon_idle_road');
+    } catch (_) {}
     // 时间戳后移一点点，保证重启时这份导入的档比磁盘上的旧档新（否则会被启动比对判为落后而丢弃）
     if (importedTime <= currentTime) imported.stats.lastSaveTime = currentTime + 1;
     setGameData(imported);
@@ -1570,12 +1582,9 @@ export function renderSettings(container, s) {
   };
   container.querySelector('#githubLink')?.addEventListener('click', (e) => openLink(e, 'https://github.com/ZTMYO/PokeIdle'));
   container.querySelector('#siteLink')?.addEventListener('click', (e) => openLink(e, 'https://pokeidle.shiliu.space'));
-  (async () => {
-    let v = '';
-    try { v = await window.__TAURI__?.app?.getVersion?.(); } catch (_) {}
-    const el = container.querySelector('#settingsVersion');
-    if (el) el.textContent = v ? `v${v}` : 'v1.1.5';
-  })();
+  // 版本号与版本戳都来自 build-info.js（由构建脚本按 package.json 生成）
+  const versionEl = container.querySelector('#settingsVersion');
+  if (versionEl) versionEl.textContent = [`v${APP_VERSION}`, BUILD_STAMP].filter(Boolean).join(' · ');
   // 版权声明：跳转声明视图
   container.querySelector('#declarationBtn')?.addEventListener('click', () => showDeclarationView());
 }
@@ -1666,13 +1675,13 @@ export function toggleMusicEnabled() {
   saveGame();
 }
 
-// 后台常驻：手动开关；开启前会要通知权限，失败就不改状态（别看着是开的其实没生效）
+// 后台常驻：手动开关；起服务失败就不改状态（别看着是开的其实没生效）
 async function toggleBackgroundService() {
   ensureSettings();
   const on = !gameData.settings.backgroundService;
   const mob = window.__POKEIDLE_MOBILE__;
   if (on) {
-    try { await mob?.foregroundStart?.(); } catch (_) { flashSaveHint('开启失败，请在系统设置里允许通知'); return; }
+    try { await mob?.foregroundStart?.(); } catch (e) { console.error('[后台常驻] 开启失败:', e); flashSaveHint('开启失败，请稍后再试'); return; }
   } else {
     try { await mob?.foregroundStop?.(); } catch (_) {}
   }
@@ -2229,7 +2238,7 @@ const TUTORIAL_SECTIONS = [
     html: `<p><b>树果方块</b>是<b>混合器</b>的产物：用配方树果制成，用于吸引特定的宝可梦。</p>`
       + `<p><b>品质</b>决定效果：品质越高，遇敌时直接遇到目标宝可梦的概率越高（${Object.values(BLOCK_QUALITY).map(q => `${q.label} <b>${Math.round(q.chance * 100)}</b>%`).join(' / ')}）。</p>`
       + `<p>按行走里程计时：主角再走 <b>${BLOCK_DISTANCE}</b> 米没被吃掉则风干失效（停下不走不消耗），期间不改变正常遇敌节奏。</p>`
-      + `<p>配方在当前地区野外没有宝可梦爱吃则无效；方块只对<b>已经拥有</b>的宝可梦有效，可以在图鉴查看它爱吃的配方；<b>神兽</b>不会被方块吸引。</p>`
+      + `<p>配方在当前地区野外没有宝可梦爱吃则无效；方块只对<b>已解锁图鉴</b>的宝可梦有效，可以在图鉴查看它爱吃的配方；<b>神兽</b>不会被方块吸引。</p>`
       + `<p>注意：方块命中目标的那次遇敌，闪光按默认 <b>1/${Math.round(1 / SHINY_CHANCE)}</b> 判定，不享受闪耀护符加成，也不计入闪耀护符的遭遇计数。</p>`,
   },
   {

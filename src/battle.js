@@ -124,7 +124,7 @@ export function cancelBgResultReplay() {
 // 确认框随视图隐藏后无人点击，若不收尾，返回挂机页会停在"对战中"——道路暂停、不再遇敌，
 // 而捕获判定早已落库（宝可梦已在仓库/图鉴）。离开即视为放弃查看详情，直接收尾回空闲。
 export function finalizePendingCatch() {
-  if (phase !== 'caught' || _bgCatch || _autoCatching || _eggHatching) return false;
+  if (_encPhase !== 'caught' || _bgCatch || _autoCatching || _eggHatching) return false;
   goIdle();
   return true;
 }
@@ -132,7 +132,7 @@ export function finalizePendingCatch() {
 // ===== 遇敌调度 =====
 export function scheduleNextEncounter(delay) {
   if (nextEncounterTimer) { clearTimeout(nextEncounterTimer); setNextEncounterTimer(null); }
-  if (phase !== 'idle') return;
+  if (phase !== 'idle' && phase !== 'battle') return; // 战斗中也能排：遭遇与对战互不干扰
   // 树果方块：始终按普通间隔遇敌，仅提高目标宝可梦的出现概率
   let d = delay || rand(ENCOUNTER_MIN, ENCOUNTER_MAX) * 1000;
   setNextEncounterTimer(setTimeout(tryEncounter, d));
@@ -274,10 +274,26 @@ let _encPhase = null;
 export const encState = () => _encPhase;
 export function setEncPhase(p) {
   _encPhase = p;
-  if (phase !== 'battle') setPhase(p || 'idle'); // 没有对战时同步给 phase（界面 idle↔encounter 仍看它）
+  if (phase === 'battle') {
+    // 战斗中遭遇收尾（收服/逃跑）：上屏直接回挂机，别等玩家去点文字框箭头——
+    // 那时玩家正在下屏打对战，永远等不到，上屏就卡住了
+    if (!p) {
+      showView('idleView');
+      hideTextBox();
+    }
+    return; // 战斗中：phase 归对战，遭遇只管自己
+  }
+  // 只有当前 phase 本来就是遭遇态（或本来就没有遭遇、要回到挂机）时才回写，
+  // 否则会把 eggResult 这类别的状态顶掉——孵蛋结算页退出不了就是这么来的
+  if (!p && phase !== 'encounter' && phase !== 'caught' && phase !== 'fled') return;
+  setPhase(p || 'idle');
 }
 // 对战结束后 phase 回到哪：遭遇还在就回遭遇，否则回挂机
-export function resumePhaseAfterBattle() { setPhase(_encPhase || 'idle'); }
+export function resumePhaseAfterBattle() {
+  // 只有确实在战斗中、或还有遭遇在进行时才动 phase：别把孵蛋结算这类状态顶掉
+  if (!_encPhase && phase !== 'battle') return;
+  setPhase(_encPhase || 'idle');
+}
 let _encPokeCb = null;      // 碰到主角后的回调（真正开始战斗）
 let _encPokeWaitTimer = null; // 战斗中自走用的定时器（世界停摆时替代步进器）
 let _encPokeWaiting = false;  // 已在主角脚下等着开战（战斗结束立刻开）
@@ -1476,7 +1492,8 @@ export async function autoCatch() {
 // ===== 后台挂机遇敌补算 =====
 // 浏览器后台期间遇敌调度被节流（15~30 秒 → 约 1 分钟），恢复前台时把停摆期间错过的遭遇
 // 按前台节奏补算。仅自动操作（捕捉/佛系）开启时有效：逐次走真实选宝可梦 + 自动捕捉快速结算，
-// 不播动画不切视图，判定/入账/日志全部复用正常流程，保证数据与前台等效
+// 不播动画不切视图，判定/入账/日志全部复用正常流程，保证数据与前台等效。
+// 补算途中撞上"暂停"即停：主角卡在那只上不前进，剩余停摆时长交回调用方丢弃
 export async function catchUpEncounters(secs, buffRemainingMs) {
   if (!bgCatchupEnabled()) return; // 后台补发开关关闭时（如安卓沿用离线暂停哲学）不做任何遇敌补算
   syncBuffExpiry(); // 恢复前先同步 buff 到期状态（过期自动续杯）：与是否补遭遇无关，
@@ -1509,6 +1526,7 @@ export async function catchUpEncounters(secs, buffRemainingMs) {
   setBulkQuiet(true);
   setSaveSuspended(true);
   let done = 0, balls = 0, shinies = 0;
+  let stalledSec = null; // 停摆窗口里真正走过的秒数，全程走完为 null
   const caught = []; // 补算期间捕获成功的宝可梦（含形态名），随汇总日志打印便于核对
   // 把 total 场按停摆窗口均匀铺开：每场的日志/获得时间写成"当时"，日志页就是一条连续时间线
   const startAt = Date.now() - secs * 1000;
@@ -1536,6 +1554,8 @@ export async function catchUpEncounters(secs, buffRemainingMs) {
       } else {
         await fleeEncounter(true); // 仅佛系模式：直接记自动逃跑（跳过倒计时等待）
       }
+      // 撞上"暂停"：主角停在这只上，后面的停摆时长不再补
+      if (encState() === 'encounter') { stalledSec = Math.round((i * stepMs) / 1000); break; }
       done++;
       balls += gameData.stats.totalBallsUsed - ballsBefore;
       if (shiny) shinies++;
@@ -1556,8 +1576,8 @@ export async function catchUpEncounters(secs, buffRemainingMs) {
     setBulkQuiet(false); // 恢复背景曲（补算期间的闪光提示音在此一并补播）
     saveGame();
   }
-  const result = { done, total, balls, shinies, caught };
-  console.log(`[挂机补发] 遇敌补算 ${done}/${total} 次（消耗球 ${balls}，闪光 ${shinies}${caught.length ? `，捕获 ${caught.join('、')}` : ''}）`);
+  const result = { done, total, balls, shinies, caught, stalledSec };
+  console.log(`[挂机补发] 遇敌补算 ${done}/${total} 次（消耗球 ${balls}，闪光 ${shinies}${caught.length ? `，捕获 ${caught.join('、')}` : ''}${stalledSec != null ? `，模拟到 ${stalledSec}s 处遇暂停` : ''}）`);
   return result;
 }
 

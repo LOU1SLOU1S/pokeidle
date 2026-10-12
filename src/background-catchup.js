@@ -71,6 +71,7 @@ export function startBackgroundCatchup() {
     } else if (_hiddenAt) {
       _bgSecAccum += (Date.now() - _hiddenAt) / 1000;
       _hiddenAt = 0;
+      deps.onShown(); // 停摆窗口内刷出的遭遇还压在屏幕上：回前台先按当前模式结掉
     }
   });
 }

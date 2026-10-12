@@ -2,6 +2,7 @@
   "name": "PokeIdle",
   "private": true,
   "version": "1.1.5",
+  "buildStamp": "beta1",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
@@ -12,7 +13,8 @@
     "android:debug": "node mobile/android.mjs debug",
     "android:build": "node mobile/android.mjs release",
     "android:install": "node mobile/android.mjs install",
-    "android:keystore": "node mobile/keystore.mjs"
+    "android:keystore": "node mobile/keystore.mjs",
+    "android:serve": "node mobile/dev-server.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.0",
@@ -20,8 +22,7 @@
     "@capacitor/browser": "^7.0.0",
     "@capacitor/core": "^7.4.0",
     "@capacitor/filesystem": "^7.1.0",
-    "@capacitor/share": "^7.0.0",
-    "@capawesome-team/capacitor-android-foreground-service": "^7.0.1"
+    "@capacitor/share": "^7.0.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.0",

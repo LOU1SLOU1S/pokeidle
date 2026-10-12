@@ -1,5 +1,8 @@
 import { App } from '@capacitor/app';
-import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
+import { registerPlugin } from '@capacitor/core';
+
+// 自写的安卓插件（KeepAlivePlugin.java）+ 前台服务（KeepAliveService.java）：不依赖任何第三方插件
+const KeepAlive = registerPlugin('KeepAlive');
 import { Browser } from '@capacitor/browser';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -64,21 +67,14 @@ async function exportSave(data) {
 }
 
 // 后台常驻（前台服务）：常驻通知 + 进程提到前台优先级，防小米/红米这类系统清后台。
-// 通知是 Android 强制的，藏不掉；开关在游戏设置里，默认关
-async function foregroundStart() {
-  const perm = await ForegroundService.checkPermissions();
-  if (perm.display !== 'granted') await ForegroundService.requestPermissions();
-  await ForegroundService.startForegroundService({
-    id: 1,
-    title: '口袋挂机运行中',
-    body: '正在后台挂机，回到游戏可继续',
-    smallIcon: 'ic_launcher',
-    notificationChannelId: 'pokeidle',
-    silent: true,
-  });
+// 通知是 Android 强制的，藏不掉；开关在游戏设置里，默认关。
+// 通知不做动态内容：切后台 JS 被冻结，推过去的捕捉/地区状态只会是停摆前的旧值
+// 不去要通知权限：Android 13+ 没有它也照样起服务（只是通知看不见）
+async function foregroundStart(title = '', text = '') {
+  await KeepAlive.start({ title, text });
 }
 async function foregroundStop() {
-  await ForegroundService.stopForegroundService();
+  await KeepAlive.stop();
 }
 
 window.__POKEIDLE_MOBILE__ = {
