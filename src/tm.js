@@ -53,7 +53,7 @@ function ensureShop(pool) {
 
 const rowOf = (id) => (_pool || []).find((r) => r.id === id);
 
-const tmIcon = (type, cls) => `<img class="${cls || 'shop-icon'}" src="./items/${TM_ICONS[type] || 'tm/tm-normal.png'}" alt="${type}" />`;
+const tmIcon = (type) => `<img class="tm-icon" src="./items/${TM_ICONS[type] || 'tm/tm-normal.png'}" alt="${type}" />`;
 
 const typeBadge = (type) =>
   `<span class="b-move-type" style="background:${TYPE_COLORS[type] || '#888'};color:${typeIconColor(type)}"><svg class="b-move-type-icon"><use xlink:href="#icon-type-${type}"></use></svg></span>`;

@@ -8,7 +8,7 @@ import { massTick, ensureMassInit as ensureMassInitEvents, twistTick, ensureTwis
 import { $, showView, updateTextBox, showConfirmBar, isIdleStageVisible, isPageHidden, applyUiMode, getUiMode, isUiMobile, isDualLayout, isStageView, getAppChannelView, closeAppArea, applyCharSprites, updateBackpack, updateStats, setIdleCharacter, renderIncubatorView, updateIncubatorTimers, updateIncubatorBadge, setupFoodTooltip, isIncubatorLogOpen, closeIncubatorLog, closeIncubatorEggView } from './ui.js';
 import { spawnItemDrop, hasActiveDrop, activateHoney, activateShinyCharm, restoreHoneyRecord, restoreCharmRecord, grantItem, cancelItemDrop, rollCandyMult, ensureEvoMeta } from './items.js';
 import { syncBlockVisual, startBlockCountdown, clearBlockCountdown, showMixerView } from './mixer.js';
-import { scheduleNextEncounter, throwBall, fleeEncounter, goIdle, pauseAutoFleeTimer, showEncounter, tryAutoRefill, catchFilterResult, catchUpEncounters, settleEncounterForBackground, setEncounterAt, syncBattleMusic, encState, setEncPhase } from './battle.js';
+import { scheduleNextEncounter, throwBall, fleeEncounter, goIdle, pauseAutoFleeTimer, showEncounter, tryAutoRefill, catchFilterResult, catchUpEncounters, settleEncounterForBackground, settleStaleEncounter, ensureEncounterTextBox, setEncounterAt, syncBattleMusic, encState, setEncPhase } from './battle.js';
 import { startIdleRotation } from './messages.js';
 import { tryStartFishing, onRoadChanged, getFishingGuarantee, isFishingPending } from './fishing.js';
 import { helperTick, showBerryView, catchUpHelper } from './berry.js';
@@ -400,6 +400,8 @@ async function onGameTick() {
   if (phase === 'battle' && !encState() && $('encounterView')?.style.display !== 'none') {
     import('./ui.js').then((m) => m.showView('idleView'));
   }
+  // 兜底自愈：遭遇在屏上却没有文字框（后台/恢复路径可能漏写）→ 补上
+  ensureEncounterTextBox();
 
   const region = getCurrentRegion();
   if (region.id !== _lastRegionId) {
@@ -569,7 +571,7 @@ async function onGameTick() {
           for (let i = 0; i < gained; i++) {
             gainedQty += (item === 'candy' ? rollCandyMult() : 1) + extraDropQty(item);
           }
-          setSimClock(Date.now() - idleAfkSecRaw * 1000); // 补发的掉落记在停摆窗口起点，别挤在回前台那一秒
+          setSimClock(0); // 补发的道具统一记在回来的时刻（停摆期间的遭遇仍按模拟时刻铺开）
           grantItem(item, gainedQty);
           setSimClock(0);
           gameData[key] -= gained;
@@ -1434,6 +1436,7 @@ async function init() {
     }
     try { localStorage.setItem('pokemon_idle_road', JSON.stringify({ roadIdx: _roadIdx, fished: getFishingGuarantee().fished })); } catch (_) {}
   };
+  window.__saveLastChance = saveLastChance; // 供刷新按钮在 reload 前同步落盘
   window.addEventListener('beforeunload', saveLastChance);
   window.addEventListener('pagehide', saveLastChance); // 移动端 WebView 更可靠的是 pagehide
 
@@ -1453,8 +1456,9 @@ async function init() {
       return ms;
     },
     onHidden: () => settleEncounterForBackground(),
-    // 回前台：屏幕上还压着遭遇就按当前模式结掉，手动/暂停由内部守卫跳过
-    onShown: () => settleEncounterForBackground().catch(() => {}),
+    // 回前台：离开得久就把屏上那只当"早该打完"静默结算并刷新画面（阈值与暂停守卫在函数里）；
+    // 离开得短就什么都不做，让自动丢球计时器等原流程接着跑
+    onShown: (awaySec) => settleStaleEncounter(awaySec).catch(() => {}),
   });
   startBackgroundCatchup();
 

@@ -1232,6 +1232,14 @@ function cleanupEncounterState() {
   _eventEncounterSettled = true;
   // 遭遇现场已清理：兜底隐藏底部文本框（后台结算/打断路径不切视图，showView 的隐藏不会触发）
   hideTextBox();
+  // 清掉上一只留下的内联位移（逃跑/丢球动画的终点）：不清的话下一只出现时会先闪在上一只的终点位置
+  const gif = $('encounterGif');
+  if (gif) {
+    gif.style.transition = 'none';
+    gif.style.transform = '';
+    void gif.offsetWidth;
+    gif.style.transition = '';
+  }
 }
 
 // ===== 恢复暂停的 buff 倒计时并重新调度遇敌（goIdle / NPC 对战结束后共用） =====
@@ -1579,6 +1587,41 @@ export async function catchUpEncounters(secs, buffRemainingMs) {
   const result = { done, total, balls, shinies, caught, stalledSec };
   console.log(`[挂机补发] 遇敌补算 ${done}/${total} 次（消耗球 ${balls}，闪光 ${shinies}${caught.length ? `，捕获 ${caught.join('、')}` : ''}${stalledSec != null ? `，模拟到 ${stalledSec}s 处遇暂停` : ''}）`);
   return result;
+}
+
+// 回前台时判定"屏上这只早就该结束了"的离开时长阈值（秒）
+const STALE_AWAY_SEC = 15;
+
+// ===== 回前台时清理"早就该结束"的遭遇 =====
+// 离开时间够久的话，屏上这一只（自动模式）其实早该打完：静默结算（不播动画、不弹文案、
+// 不留补播）然后把上屏刷新到当前状态，别让它顶着一个旧地区的画面继续摆着
+export async function settleStaleEncounter(awaySec) {
+  if (awaySec < STALE_AWAY_SEC) return;
+  if (_encPhase !== 'encounter' || !currentEncounter) return;
+  if (!gameData.settings?.autoCatch && !gameData.settings?.autoFlee) return;
+  if (catchFilterResult() === 'stop') return; // 暂停档：留在屏上交给玩家
+  _bgCatchup = true; // 借补算的静默开关：不播动画、不弹文案、不切视图
+  try {
+    if (gameData.settings?.autoCatch) await autoCatch();
+    else await fleeEncounter(true);
+  } catch (e) {
+    console.error('[回前台结算] 异常:', e);
+  } finally {
+    _bgCatchup = false;
+    cancelBgResultReplay(); // 静默结算不留补播
+    if (typeof window !== 'undefined') showView('idleView');
+  }
+}
+
+// 遭遇页在屏上却没有文字框（后台/恢复路径可能漏写）：补上文案。
+// 主动逃跑的离场动画要按文字框位置算终点，缺了它宝可梦会往屏幕左上角飞
+export function ensureEncounterTextBox() {
+  if (_bgCatchup || _encPhase !== 'encounter' || !currentEncounter) return;
+  if (!isOnGameView()) return;
+  const box = $('textBox');
+  if (box && box.classList.contains('show')) return;
+  const name = currentEncounter.form || currentEncounter.name;
+  updateTextBox(encounterMsg || (currentIsShiny ? '野生的 闪光' + name + ' 跳出来了！' : '野生的 ' + name + ' 跳出来了！'), false);
 }
 
 // ===== 浏览器后台遭遇立即清算 =====

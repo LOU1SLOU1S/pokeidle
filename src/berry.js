@@ -846,10 +846,10 @@ function harvest(i) {
   f.plots[i] = null;
   addSystemLog('berry_harvest', { berry: p.type, qty });
   saveGame();
-  // 树果飞向库存箱的动效播完再重绘（render 会清掉动效图标）
+  // 只重绘这一块地：整页 render 会把别人正在飞的收获动效一起清掉
   _harvesting.add(i);
   const wait = spawnHarvestFly(i, p.type, qty);
-  setTimeout(() => { _harvesting.delete(i); render(); notifyBerryChanged(); }, wait);
+  setTimeout(() => { _harvesting.delete(i); updatePlotDom(i); notifyBerryChanged(); }, wait);
 }
 
 function waterPlot(i) {
