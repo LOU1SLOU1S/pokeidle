@@ -11530,3 +11530,50 @@ html.ui-dual .app-host { /* 下屏容器要真实盒子，app 页才撑得满、
   will-change: transform, opacity;
 }
 #evoFlash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+
+/* === 分享图预览 === */
+.share-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.72);
+}
+.share-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-height: 100%;
+}
+.share-mask img {
+  max-width: 92vw;
+  max-height: 68vh;
+  border: 2px solid var(--console-border);
+  border-radius: 4px;
+  background: var(--console-body);
+}
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.share-btn {
+  padding: 5px 14px;
+  font-family: inherit;
+  font-size: clamp(11px, 1vh + 6px, 15px);
+  font-weight: 700;
+  color: var(--ui-color);
+  background: var(--console-body);
+  border: 1px solid var(--ui-color);
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+.share-btn:hover { background: var(--console-border); }   /* 悬停只把底色压深一档，别做透明 */
+[data-theme="dark"] .share-btn:hover { background: #000; }
+.share-btn:active { transform: scale(0.95); }
