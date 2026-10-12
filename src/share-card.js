@@ -171,7 +171,7 @@ async function drawCard(ctx, m) {
   outline(ctx, 12, 12, W - 24, H - 24, c.edge, 4, 22);
 
   // 标题行：编号 + 名字（全名含形态）+ 游戏自带图标 + Lv
-  const dispName = fit(ctx, m.title || m.name || '', R - L - 700, 56, 700);
+  const dispName = m.title || m.name || '';   // 昵称上限 5 字、形态名也放得下，图上不截断
   let nx = L;
   label(ctx, dispName, nx, 106, { size: 56, weight: 700, color: ui });
   nx += measure(ctx, dispName, 56, 700) + 22;

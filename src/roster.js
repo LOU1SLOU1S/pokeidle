@@ -177,6 +177,8 @@ function ensureEvoDataForFilter() {
 
 function currentFilterPool() {
   let pool = inRoster();
+  // 批量放生：锁定的个体整个不参与——列表里不出现、搜索也搜不到、全选也选不上
+  if (_batchRelease) pool = pool.filter(p => !p.locked);
   const adv = _advFilter;
   if (adv) {
     // 高级筛选：名称/来源/稀有度/闪光/变体/属性/地区/等级/个体值/性别
@@ -1510,7 +1512,7 @@ function shareCardModel(p, poke) {
   const g = ensureGender(p);
   return {
     name: rosterName(p),
-    title: poke.form || poke.name,   // 分享图显示全名（含形态）
+    title: p.nickname || poke.form || poke.name,   // 分享图：有昵称用昵称，否则全名（含形态）
     dexNo: String(poke.index),
     spriteName: poke.form || poke.name,
     image: poke.image || '',
@@ -1557,10 +1559,10 @@ function showRosterDetail(id) {
   list.innerHTML = `
     <div style="font-size:13px;font-weight:700;padding:4px 5px 2px;display:flex;align-items:center;justify-content:space-between;">
       <span><span id="rosterNickSpan">${rosterName(p)}</span><button class="roster-nick-btn" id="rosterNickBtn" title="改名"><svg t="1786243847045" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="13" height="13"><path d="M138.666667 810.666667V213.333333c0-41.216 33.450667-74.666667 74.666666-74.666666h469.333334v64H213.333333a10.666667 10.666667 0 0 0-10.666666 10.666666v597.333334c0 5.888 4.778667 10.666667 10.666666 10.666666h597.333334a10.666667 10.666667 0 0 0 10.666666-10.666666V352h64V810.666667A74.666667 74.666667 0 0 1 810.666667 885.333333H213.333333A74.666667 74.666667 0 0 1 138.666667 810.666667z" fill="currentColor"></path><path d="M444.330667 540.032L856.362667 128l45.226666 45.226667-411.989333 412.032-45.226667-45.226667z" fill="currentColor"></path></svg></button>${p.shiny ? ' <svg class="roster-shiny" viewBox="0 0 1024 1024" width="14" height="14" style="flex-shrink:0;vertical-align:-2px;transform:translateY(-2px);"><use xlink:href="#icon-star"/></svg>' : ''}<span class="roster-detail-lv${_detailEvoAllowed ? ' can-use' : ''}" id="rosterDetailLv"${_detailEvoAllowed ? ' data-exp-candy-open' : ''}>${dGSpan}Lv${p.level || 1}</span></span>
-      <div style="display:flex;flex-direction:row;align-items:flex-end;gap:2px;flex-shrink:0;">
-        <button class="roster-release" data-pokedex title="查看图鉴">图鉴</button>
-        <button class="roster-release" data-share title="生成分享图">分享</button>
-        <button class="roster-release" data-release>放生</button>
+      <div class="roster-detail-tools">
+        <button class="roster-tool" data-pokedex title="查看图鉴"><svg viewBox="0 0 1024 1024" width="18" height="18"><use xlink:href="#icon-book"></use></svg></button>
+        <button class="roster-tool${p.locked ? ' on' : ''}" data-lock title="${p.locked ? '取消锁定' : '锁定'}"><svg viewBox="0 0 1024 1024" width="18" height="18"><use xlink:href="${p.locked ? '#icon-lock' : '#icon-unlock'}"></use></svg></button>
+        <button class="roster-tool" data-share title="生成分享图"><svg viewBox="0 0 1024 1024" width="18" height="18"><use xlink:href="#icon-share"></use></svg></button>
       </div>
     </div>
     <div class="roster-detail-head">
@@ -1577,7 +1579,10 @@ function showRosterDetail(id) {
       </div>
     </div>
     <div class="roster-detail-block">
-      <div class="roster-detail-title${_detailEvoAllowed ? ' can-use' : ''}"${_detailEvoAllowed ? ' data-crown-open' : ''}>个体值 <span style="opacity:0.6;">${ivSum(p)}/186${crownedCount(p) ? ` · 王冠 ${crownedCount(p)}` : ''}</span></div>
+      <div class="roster-detail-title-row">
+        <div class="roster-detail-title${_detailEvoAllowed ? ' can-use' : ''}"${_detailEvoAllowed ? ' data-crown-open' : ''}>个体值 <span style="opacity:0.6;">${ivSum(p)}/186${crownedCount(p) ? ` · 王冠 ${crownedCount(p)}` : ''}</span></div>
+        <button class="roster-release${p.locked ? ' locked' : ''}" data-release>放生</button>
+      </div>
       <div class="roster-iv-flex">
         ${ivHexagon(p)}
         <div class="roster-iv-bars">
@@ -1670,7 +1675,14 @@ function showRosterDetail(id) {
     });
   }
   // 右上角放生：移除个体并播放告别动画
-  list.querySelector('[data-release]')?.addEventListener('click', () => releasePokemon(id));
+  list.querySelector('[data-release]')?.addEventListener('click', () => {
+    // 锁定的个体不能放生：给一条提示（按钮只是画成禁用样，仍可点击）
+    if (p.locked) {
+      showConfirmBar('宝可梦已锁定，先解锁才能放生', null, null, { singleButton: true });
+      return;
+    }
+    releasePokemon(id);
+  });
   // 图鉴：跳转到该宝可梦的图鉴详情页（第 4 层子页），返回键先回详情页
   list.querySelector('[data-pokedex]')?.addEventListener('click', () => {
     stopShinySparkleLoop();
@@ -1679,6 +1691,19 @@ function showRosterDetail(id) {
       m.showEncounterLogs(p.species);
       showView('pokedexView');
     });
+  });
+  // 锁定：标记存进个体，按钮就地换图标，不重画详情（免得列表滚动被重置）
+  list.querySelector('[data-lock]')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    p.locked = !p.locked;
+    saveGame();
+    btn.classList.toggle('on', !!p.locked);
+    btn.title = p.locked ? '取消锁定' : '锁定';
+    list.querySelector('[data-release]')?.classList.toggle('locked', !!p.locked);
+    const use = btn.querySelector('use');
+    const href = p.locked ? '#icon-lock' : '#icon-unlock';
+    use.setAttribute('href', href);
+    use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href);
   });
   loadMovesBlock(id);
 }
