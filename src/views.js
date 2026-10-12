@@ -1,5 +1,5 @@
 import { CANDY_EXCHANGE, ITEM_NAMES, ITEM_RATES, CATCH_RATES, CATCH_BONUS_INC, ULTRA_BALL_ADD, FLEE_CHANCE, FLEE_CHANCE_INC, FLEE_CHANCE_MAX, SHINY_CHANCE, CHARM_SHINY_CHANCE, CHARM_UNCAUGHT_CHANCE, ENCOUNTER_MIN, ENCOUNTER_MAX, BUFF_DURATION, BUFF_ENCOUNTER_MIN, BUFF_ENCOUNTER_MAX, HONEY_RARITY_BOOST, CHARM_RARITY_BOOST, FISH_POKEMON_CHANCE, FISH_BUFF_POKEMON_CHANCE, FISH_RARE_RATE, FISH_WAIT_MIN, FISH_WAIT_MAX, FISH_QTY_MIN, FISH_QTY_MAX, FISH_TRIGGER_MIN, FISH_TRIGGER_MAX, FISH_EVO_CHANCE, REGION_CYCLE, PX_PER_METER, AUTO_FLEE_TIMEOUT, ROAD_SPECIAL_CHANCE, ROAD_SPEED_WALK, ROAD_SPEED_RUN, ROAD_SPEED_BIKE, HATCH_DIST_MIN, HATCH_DIST_MAX, BOUNTY_PER_REGION, TM_PRICE_TIERS, TM_SHOP_DAILY, BOUNTY_CANDY_MIN, BOUNTY_CANDY_MAX, BOUNTY_COMMON_QTY_MIN, BOUNTY_COMMON_QTY_MAX, BLOCK_DISTANCE, BLOCK_QUALITY, TRADE_REFRESH_MS, TRADE_SHINY_CHANCE, FARM_PLANT_COST, FARM_MATURE_MIN, FARM_MATURE_MAX, FARM_HARVEST_MIN, FARM_HARVEST_MAX, FARM_MAX_WATER, FARM_WATER_DROP, FARM_BOARD_DEMANDS, FARM_BOARD_BIG_QTY_MIN, FARM_BOARD_BIG_QTY_MAX, FARM_BOARD_MEGA_QTY_MIN, FARM_BOARD_MEGA_QTY_MAX, FARM_HELPER_WORK_STAGE, FARM_HELPER_REST, MASS_GEN_MIN, MASS_GEN_MAX, MASS_DURATION, MASS_COUNT_MIN, MASS_COUNT_MAX, MASS_SPAWN_MIN, MASS_SPAWN_MAX, MASS_SPAWN_HONEY_MIN, MASS_SPAWN_HONEY_MAX, MASS_SHINY_CHANCE, TWIST_GEN_MIN, TWIST_GEN_MAX, TWIST_DURATION, TWIST_COUNT_MIN, TWIST_SHINY_CHANCE, TWIST_GUARANTEED_IVS, TWIST_RGB_CHANCE, TWIST_POLLUTED_CHANCE, WILD_LEVEL_MAX, LEGEND_ENCOUNTER_RATE, LEGEND_ENCOUNTER_RATE_BUFF, LEGEND_PITY, LEGEND_LEVEL, TRAIN_SLOTS, TRAIN_XP_PER_MIN, TRAIN_LAZY, TRAIN_SATIETY_MAX, TRAIN_SATIETY_DRAIN_PER_MIN, TRAIN_SATIETY_EAT_AT, TRAIN_SATIETY_PER_BERRY, BATTLE_REFRESH_MS, BATTLE_TIER_BAND, COIN_RATE, DEALER_STAND, BJ_MULT, HAND_SIZE, RIICHI_COST, GACHA_DRAW_COST, GACHA_DUP_REFUND, EXP_CANDY_XP, EXP_CANDY_DROP, RELEASE_XP_RATE, TRADE_LEVEL_CHANCE, TRADE_WANT_LEVEL_MIN, TRADE_WANT_LEVEL_MAX, FOLLOWER_DRAW_COST, FOLLOWER_TIER_CHANCE, FOLLOWER_TIER_BOOST, FOLLOWER_STAR_MIN, FOLLOWER_EFFECTS, DISPATCH_DURATIONS, DISPATCH_DUR_MULT, DISPATCH_CANDY_PER_HOUR, DISPATCH_CANDY_JITTER, DISPATCH_FREE_SLOTS, DISPATCH_TYPE_BOOST, DISPATCH_VARIANT_CANDY_BONUS, DISPATCH_EVO_MAX_CHANCE } from './config.js';
-import { phase, gameData, allPokemon, getPokemonByIndex, getCurrentRegion, currentEncounter, honeyBuffActive, charmBuffActive, saveGame, formatNum, pad, pushNav, setGameData, getDefaultSave, ensureGpsState, _fishing } from './state.js';
+import { phase, gameData, allPokemon, getPokemonByIndex, getCurrentRegion, currentEncounter, honeyBuffActive, charmBuffActive, saveGame, setSaveSuspended, formatNum, pad, pushNav, setGameData, getDefaultSave, ensureGpsState, _fishing } from './state.js';
 import { $, showView, updateTextBox, hideTextBox, updateBackpack, updateStats, isOnGameView, isUiMobile, applyCharSprites, showConfirmBar, logicViewport, popupBounds, getUiMode, applyUiMode, isMobilePlatform, touchText, watchOutsidePress } from './ui.js';
 import { doCandyExchange, doSellBall, activateHoney, activateShinyCharm, refillBuffIfEmpty, ITEM_ICONS, BERRY_ICONS, BERRY_NAMES, sellPriceOf, sellSortRank, itemIconSrc, itemDetailOf } from './items.js';
 import { formatLogTime } from './pokedex.js';
@@ -983,6 +983,7 @@ export function renderSettings(container, s) {
   const musicVolume = s.musicVolume ?? 0.6;
   const musicEnabled = s.musicEnabled !== false;
   const sfxEnabled = s.sfxEnabled !== false;
+  const backgroundService = s.backgroundService === true; // 后台常驻（仅安卓包有这个能力）
   const battleMusic = s.battleMusic !== false;
   const darkMode = s.darkMode || false;
   const uiMobile = getUiMode() !== 'classic'; // 双屏布局（手游模式/桌面双屏），存档未设置时按平台取默认
@@ -1082,6 +1083,16 @@ export function renderSettings(container, s) {
           </div>
         </div>
         <div class="cf-hint" style="padding:0 4px 4px;">遇敌后 30 秒未处理宝可梦会自动逃跑，防止挂机进度卡住</div>
+        ${window.__POKEIDLE_MOBILE__?.foregroundStart ? `
+        <div class="auto-catch-row">
+          <div class="auto-catch-label">后台常驻</div>
+          <div class="toggle-switch" id="toggleBackground">
+            <div class="toggle-track ${backgroundService ? 'on' : ''}"></div>
+            <div class="toggle-knob"></div>
+          </div>
+        </div>
+        <div class="cf-hint" style="padding:0 4px 4px;">开启后下拉通知栏会常驻一条通知，系统不会随便清掉后台</div>
+        ` : ''}
       </div>
 
       <div class="settings-group">
@@ -1193,13 +1204,21 @@ export function renderSettings(container, s) {
           <span class="auto-catch-label">刷新游戏</span>
           <span class="reset-save-btn" id="reloadGameBtn">刷新</span>
         </div>
+        <div class="reset-save-row">
+          <span class="auto-catch-label">保存并退出</span>
+          <span class="reset-save-btn" id="saveExitBtn">保存退出</span>
+        </div>
       </div>
       <a href="https://github.com/ZTMYO/PokeIdle" id="githubLink" class="settings-footer-link" target="_blank" rel="noopener">
         <svg viewBox="0 0 1024 1024" width="16" height="16" style="flex-shrink:0;"><use xlink:href="#icon-github"/></svg>
         <span style="font-weight:600;">ZTMYO</span>
       </a>
       <div class="settings-version" id="settingsVersion"></div>
-      <div id="declarationBtn" style="text-align:center;font-size:9px;opacity:0.5;padding:2px 0 4px;cursor:pointer;">版权声明</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:9px;padding:2px 0 4px;">
+        <a href="https://pokeidle.shiliu.space" id="siteLink" class="settings-mini-link" target="_blank" rel="noopener">官方网站</a>
+        <span style="opacity:0.3;">|</span>
+        <span id="declarationBtn" class="settings-mini-link">版权声明</span>
+      </div>
     </div>
   `;
   container.querySelector('#toggleAutoCatch')?.addEventListener('click', toggleAutoCatch);
@@ -1207,6 +1226,7 @@ export function renderSettings(container, s) {
   container.querySelector('#toggleVariantMaster')?.addEventListener('click', toggleVariantMasterBall);
   container.querySelector('#toggleMusicEnabled')?.addEventListener('click', toggleMusicEnabled);
   container.querySelector('#toggleSfxEnabled')?.addEventListener('click', toggleSfxEnabled);
+  container.querySelector('#toggleBackground')?.addEventListener('click', toggleBackgroundService);
   container.querySelector('#genderBrendan')?.addEventListener('click', () => toggleGender('brendan'));
   container.querySelector('#genderMay')?.addEventListener('click', () => toggleGender('may'));
   container.querySelector('#toggleAutoFlee')?.addEventListener('click', toggleAutoFlee);
@@ -1255,6 +1275,29 @@ export function renderSettings(container, s) {
   container.querySelector('#reloadGameBtn')?.addEventListener('click', () => {
     saveGame();
     location.reload();
+  });
+  // 保存并退出：等这次写盘真的成功再退（写失败就留下，别让玩家带着没保存的进度走）
+  container.querySelector('#saveExitBtn')?.addEventListener('click', async () => {
+    const btn = container.querySelector('#saveExitBtn');
+    btn.textContent = '保存中…';
+    setSaveSuspended(false);
+    let ok = false;
+    try { ok = await saveGame(); } catch (_) {}
+    if (!ok) {
+      btn.textContent = '保存失败';
+      flashSaveHint('存档写入失败，先别退出');
+      setTimeout(() => { btn.textContent = '保存退出'; }, 2500);
+      return;
+    }
+    btn.textContent = '已保存 ✓';
+    const mob = window.__POKEIDLE_MOBILE__;
+    if (mob?.exitApp) { setTimeout(() => mob.exitApp(), 300); return; } // 安卓：直接退
+    try { 
+      const w = window.__TAURI__?.window?.getCurrentWindow?.();
+      if (w?.close) { await w.close(); return; }
+    } catch (_) {}
+    flashSaveHint('已保存，可以退出游戏了');
+    setTimeout(() => { btn.textContent = '保存退出'; }, 2500);
   });
   // 导出存档：桌面版调 Tauri 命令打开目录选择器；网页版直接下载 JSON 文件。
   // 时间戳保持真实（导入时靠确认框里把 lastSaveTime 顶到最新，见 doApplyImportedSave）
@@ -1518,19 +1561,20 @@ export function renderSettings(container, s) {
       });
     });
   }
-  // GitHub 仓库链接：Tauri 下用 opener 插件在系统浏览器打开
-  container.querySelector('#githubLink')?.addEventListener('click', (e) => {
+  // GitHub 仓库 / 官网链接：Tauri 下用 opener 插件在系统浏览器打开
+  const openLink = (e, url) => {
     e.preventDefault();
-    const url = 'https://github.com/ZTMYO/PokeIdle';
     if (window.__POKEIDLE_MOBILE__?.openExternal) window.__POKEIDLE_MOBILE__.openExternal(url);
     else if (window.__TAURI__?.opener?.openUrl) window.__TAURI__.opener.openUrl(url);
     else window.open(url, '_blank');
-  });
+  };
+  container.querySelector('#githubLink')?.addEventListener('click', (e) => openLink(e, 'https://github.com/ZTMYO/PokeIdle'));
+  container.querySelector('#siteLink')?.addEventListener('click', (e) => openLink(e, 'https://pokeidle.shiliu.space'));
   (async () => {
     let v = '';
     try { v = await window.__TAURI__?.app?.getVersion?.(); } catch (_) {}
     const el = container.querySelector('#settingsVersion');
-    if (el) el.textContent = v ? `v${v}` : 'v1.1.4';
+    if (el) el.textContent = v ? `v${v}` : 'v1.1.5';
   })();
   // 版权声明：跳转声明视图
   container.querySelector('#declarationBtn')?.addEventListener('click', () => showDeclarationView());
@@ -1588,6 +1632,7 @@ function ensureSettings() {
   if (gameData.settings.musicVolume == null) gameData.settings.musicVolume = 0.6;
   if (gameData.settings.musicEnabled == null) gameData.settings.musicEnabled = true;
   if (gameData.settings.sfxEnabled == null) gameData.settings.sfxEnabled = true;
+  if (gameData.settings.backgroundService == null) gameData.settings.backgroundService = false;
   if (gameData.settings.darkMode == null) gameData.settings.darkMode = false; // 夜间模式（默认关闭）
 }
 
@@ -1618,6 +1663,21 @@ export function toggleMusicEnabled() {
   setMusicEnabled(gameData.settings.musicEnabled);
   const container = $('settingsContent');
   renderSettings(container, gameData.settings);
+  saveGame();
+}
+
+// 后台常驻：手动开关；开启前会要通知权限，失败就不改状态（别看着是开的其实没生效）
+async function toggleBackgroundService() {
+  ensureSettings();
+  const on = !gameData.settings.backgroundService;
+  const mob = window.__POKEIDLE_MOBILE__;
+  if (on) {
+    try { await mob?.foregroundStart?.(); } catch (_) { flashSaveHint('开启失败，请在系统设置里允许通知'); return; }
+  } else {
+    try { await mob?.foregroundStop?.(); } catch (_) {}
+  }
+  gameData.settings.backgroundService = on;
+  renderSettings($('settingsContent'), gameData.settings);
   saveGame();
 }
 

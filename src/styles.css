@@ -4738,6 +4738,17 @@ html.mobile-app #quitHide { display: none !important; }
     color: var(--ui-color);
   }
 }
+/* 设置页底部小链接（官方网站 / 版权声明）：与版本号同字号，悬停加深 */
+.settings-mini-link {
+  color: var(--ui-color);
+  opacity: 0.5;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+@media (hover: hover) {
+  .settings-mini-link:hover { opacity: 1; }
+}
 /* 版本号：小字半透明居中，与版权声明同一字号层级 */
 .settings-version {
   text-align: center;

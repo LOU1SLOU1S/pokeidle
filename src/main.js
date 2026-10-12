@@ -8,7 +8,7 @@ import { massTick, ensureMassInit as ensureMassInitEvents, twistTick, ensureTwis
 import { $, showView, updateTextBox, showConfirmBar, isIdleStageVisible, isPageHidden, applyUiMode, getUiMode, isUiMobile, isDualLayout, isStageView, getAppChannelView, closeAppArea, applyCharSprites, updateBackpack, updateStats, setIdleCharacter, renderIncubatorView, updateIncubatorTimers, updateIncubatorBadge, setupFoodTooltip, isIncubatorLogOpen, closeIncubatorLog, closeIncubatorEggView } from './ui.js';
 import { spawnItemDrop, hasActiveDrop, activateHoney, activateShinyCharm, restoreHoneyRecord, restoreCharmRecord, grantItem, cancelItemDrop, rollCandyMult, ensureEvoMeta } from './items.js';
 import { syncBlockVisual, startBlockCountdown, clearBlockCountdown, showMixerView } from './mixer.js';
-import { scheduleNextEncounter, throwBall, fleeEncounter, goIdle, pauseAutoFleeTimer, showEncounter, tryAutoRefill, catchFilterResult, catchUpEncounters, settleEncounterForBackground, setEncounterAt, syncBattleMusic } from './battle.js';
+import { scheduleNextEncounter, throwBall, fleeEncounter, goIdle, pauseAutoFleeTimer, showEncounter, tryAutoRefill, catchFilterResult, catchUpEncounters, settleEncounterForBackground, setEncounterAt, syncBattleMusic, encState, setEncPhase } from './battle.js';
 import { startIdleRotation } from './messages.js';
 import { tryStartFishing, onRoadChanged, getFishingGuarantee, isFishingPending } from './fishing.js';
 import { helperTick, showBerryView, catchUpHelper } from './berry.js';
@@ -860,6 +860,8 @@ async function init() {
   setBattleMusic(gameData.settings?.battleMusic !== false); // 战斗音乐开关：沿用上次状态
   restoreMusicMode(); // 音乐点播：沿用上次选中的歌单（当前地区 / 某一世代 / 我的喜爱）
   startTelemetry(); // 匿名在线统计
+  // 后台常驻：上次开着就恢复（只有安卓包带这个能力，其它平台静默跳过）
+  if (gameData.settings?.backgroundService) window.__POKEIDLE_MOBILE__?.foregroundStart?.().catch(() => {});
   setSfxEnabled(gameData.settings?.sfxEnabled !== false); // 音效开关：沿用上次状态
   ensureBounty();   // 生成/恢复当日地区悬赏
   ensureMassInitEvents(); // 大量出没事件：初始化下次生成时间
@@ -1059,7 +1061,7 @@ async function init() {
         setEncounterBallsUsed(sessionState.encounter.ballsUsed || 0);
         setCurrentEncounterBalls(sessionState.encounter.balls || { 'poke-ball': 0, 'ultra-ball': 0, 'master-ball': 0 });
         // 球已从背包扣除（存档已保存），不重复回退；currentEncounterBalls 保留原值以便捕获日志完整记录
-        setPhase('encounter');
+        setEncPhase('encounter'); // 遭遇子状态，刷新后丢球等判断仍认它
         // 恢复自定义遭遇文案（如钓鱼"上钩了"），避免刷新后退化为默认"跳出来了"
         setEncounterMsg(sessionState.encounter.msg || null);
         // 恢复遭遇来源与外观变体（时空扭曲 RGB/污染）：刷新后特效与捕获来源不丢失
@@ -1155,7 +1157,7 @@ async function init() {
     // 开场剧情中：箭头推进台词
     if (window.__introActive) { advanceIntro(); return; }
     // 手动捕获（自动捕捉未实际接管，如闪光暂停转手动）/ 孵蛋成功 → 询问是否查看仓库详情
-    if ((phase === 'caught' && !_autoCatching) || phase === 'eggResult') {
+    if ((encState() === 'caught' && !_autoCatching) || phase === 'eggResult') {
       if (arrow) arrow.style.display = 'none';
       updateTextBox('是否查看该宝可梦的详情？', false, host);
       const btns = $('catchConfirmBtns');
@@ -1386,16 +1388,19 @@ async function init() {
     }).catch(() => {});
   }
 
-  // 页面关闭前保存
-  window.addEventListener('beforeunload', () => {
+  // 最后一道防线：同步写 localStorage（浏览器/WebView 保证落盘，进程被杀也不丢），
+  // 只同步写这一份，异步写文件来不及。安卓被杀、锁屏清后台都靠它兜
+  const saveLastChance = () => {
     if (window.__resettingSave) return;
     saveSessionState({ manualBike: road.isManualBike() }); // 骑行中刷新/关闭：记录骑行状态供恢复
     if (gameData) {
       gameData.stats.lastSaveTime = Date.now();
-      try { localStorage.setItem('pokemon_idle_save', encodeSaveToPngDataUrl(gameData)); } catch (_) {}
+      try { localStorage.setItem('pokemon_idle_save', JSON.stringify(gameData)); } catch (_) {}
     }
     try { localStorage.setItem('pokemon_idle_road', JSON.stringify({ roadIdx: _roadIdx, fished: getFishingGuarantee().fished })); } catch (_) {}
-  });
+  };
+  window.addEventListener('beforeunload', saveLastChance);
+  window.addEventListener('pagehide', saveLastChance); // 移动端 WebView 更可靠的是 pagehide
 
   // 浏览器最小化/切后台：记账 + 立即结算进行中的遭遇——遭遇中的自动丢球由 showEncounter 的
   // 1.5s 定时器触发，该定时器会被浏览器冻结导致画面卡住；切后台立即启动后台快速结算。
@@ -1419,6 +1424,7 @@ async function init() {
   // 回前台：后台期间遭遇可能已结算完，校准战斗曲，避免残留的战斗曲与地区曲叠加播放
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) syncBattleMusic();
+    else saveLastChance(); // 切后台/最小化先同步存一份：红米这类系统随时可能直接杀进程
   });
 }
 

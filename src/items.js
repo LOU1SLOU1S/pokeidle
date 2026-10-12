@@ -230,8 +230,18 @@ export function itemDetailOf(key) {
 }
 
 // 商店的「今日道具」区块（买完只改那一行，不重建整页）
+// 今日道具的行内二次确认：第一次点变「确认兑换」，第二次才结算（和基础道具同一套逻辑）
+let _evoConfirmId = null;
+function cancelEvoConfirm() {
+  if (_evoConfirmId == null) return;
+  const btn = document.querySelector('.shop-evo-confirm');
+  if (btn) { btn.textContent = '购买'; btn.classList.remove('shop-evo-confirm'); }
+  _evoConfirmId = null;
+}
+
 export async function renderShopEvoSection(box, { onBought, onDetail } = {}) {
   if (!box) return;
+  cancelEvoConfirm(); // 重绘时清掉上一次的确认态
   await ensureEvoMeta();
   const shop = ensureEvoShop();
   const candy = gameData.items['candy'] || 0;
@@ -258,11 +268,11 @@ export async function renderShopEvoSection(box, { onBought, onDetail } = {}) {
 
   box.onclick = (e) => {
     const item = e.target.closest('.shop-item[data-evo]');
-    if (!item) return;
+    if (!item) { cancelEvoConfirm(); return; } // 点别处取消确认
     e.stopPropagation(); // 别被商店的道具兑换逻辑接走
     const id = decodeURIComponent(item.dataset.evo);
     const btn = e.target.closest('.shop-btn');
-    if (!btn) { onDetail?.(itemDetailOf(id)); return; } // 点条目本身 → 详情卡片
+    if (!btn) { cancelEvoConfirm(); onDetail?.(itemDetailOf(id)); return; } // 点条目本身 → 详情卡片
     if (btn.classList.contains('inert')) {
       if (btn.textContent === '已售罄') onDetail?.(itemDetailOf(id)); // 售罄时点按钮也给卡片
       return;
@@ -271,6 +281,14 @@ export async function renderShopEvoSection(box, { onBought, onDetail } = {}) {
     if ((shop.sold || []).includes(id)) return;
     const price = evoBasePrice(id);
     if ((gameData.items['candy'] || 0) < price) return;
+    if (_evoConfirmId !== id) { // 第一次点：只进确认态，不花钱
+      cancelEvoConfirm();
+      _evoConfirmId = id;
+      btn.textContent = '确认兑换';
+      btn.classList.add('shop-evo-confirm');
+      return;
+    }
+    _evoConfirmId = null; // 第二次点：结算
     gameData.items['candy'] -= price;
     grantItem(id, 1, '商店');
     shop.sold = [...(shop.sold || []), id];

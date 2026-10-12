@@ -1,4 +1,5 @@
 import { App } from '@capacitor/app';
+import { ForegroundService } from '@capawesome-team/capacitor-android-foreground-service';
 import { Browser } from '@capacitor/browser';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -62,8 +63,28 @@ async function exportSave(data) {
   await Share.share({ title: '口袋挂机存档', url: uri });
 }
 
+// 后台常驻（前台服务）：常驻通知 + 进程提到前台优先级，防小米/红米这类系统清后台。
+// 通知是 Android 强制的，藏不掉；开关在游戏设置里，默认关
+async function foregroundStart() {
+  const perm = await ForegroundService.checkPermissions();
+  if (perm.display !== 'granted') await ForegroundService.requestPermissions();
+  await ForegroundService.startForegroundService({
+    id: 1,
+    title: '口袋挂机运行中',
+    body: '正在后台挂机，回到游戏可继续',
+    smallIcon: 'ic_launcher',
+    notificationChannelId: 'pokeidle',
+    silent: true,
+  });
+}
+async function foregroundStop() {
+  await ForegroundService.stopForegroundService();
+}
+
 window.__POKEIDLE_MOBILE__ = {
   readSave,
+  foregroundStart,
+  foregroundStop,
   readSaveBackup,
   writeSave,
   exportSave,
