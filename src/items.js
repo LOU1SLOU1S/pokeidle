@@ -774,7 +774,9 @@ export function spawnItemDrop(itemKey, opts = {}) {
           el.remove();
           setItemDropActive(false);
           setIdleCharacter('walk');            // 姿势必须收回走路：动画收尾被战斗打断时不会卡在动作帧
-          if (phase === 'idle') road.resume();   // 路面恢复交给战斗/goIdle 统一处理
+          // 拾取时把路面停下了，这里要放回去：NPC 对战不占这一屏，路面本来就该继续走。
+          // 但上屏还压着野生遭遇时，暂停归遭遇（由 goIdle 统一恢复），不在这儿抢着启动
+          if (phase === 'idle' || (phase === 'battle' && !currentEncounter)) road.resume();
           gameData.roadItem = null; // 已拾取：清档
           grantItem(itemKey, qty);
           saveGame(); // 拾取入账立即存档，避免刷新时丢失最新掉落日志/道具

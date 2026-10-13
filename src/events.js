@@ -104,6 +104,7 @@ function spawnMassOutbreak() {
     : pickFamily(pool, () => 1);
   const pokeOrFamily = poke && poke.index ? poke : pickFamily(pool, () => 1);
   const remain = randInt(MASS_COUNT_MIN, MASS_COUNT_MAX);
+  gameData.massSpawnedSlot = slot ? slot.from : 0; // 记下"这一段已经生成过"，打光后不再重刷
   gameData.massOutbreak = {
     edge, t,                       // 事件路段 + 事件点在路段上的位置比例
     slotFrom: slot ? slot.from : 0, // 来源排期段的起点（0 = 本地随机兜底），用来识别过期的旧事件
@@ -172,11 +173,12 @@ export function massTick() {
   const now = hasSchedule() ? serverNow() : Date.now();
   if (!gameData.massOutbreak?.active) {
     // 有排期时生成时刻完全由排期说了算：存档里那个本地随机计时器（新档/离线时给的）作废。
-    // 排期是异步拉回来的，所以这里每 tick 重新算一次，排期一到就能立刻补上当前这一段。
+    // 排期是异步拉回来的，所以这里每 tick 重新算一次，排期一到就能立刻补上当前这一段；
+    // 但同一段只生成一次 —— 打光/结束后要等下一段，否则会在同一段里无限重刷
     if (hasSchedule()) {
       const cur = activeSlot('mass');
-      const nxt = cur || nextSlot('mass');
-      gameData.massNextGenAt = nxt ? nxt.from : now + 60000;
+      const p = cur && gameData.massSpawnedSlot !== cur.from ? cur : nextSlot('mass');
+      gameData.massNextGenAt = p ? p.from : now + 60000;
     }
     if (now >= gameData.massNextGenAt) spawnMassOutbreak();
     return;
@@ -387,6 +389,7 @@ function spawnTwist() {
     return;
   }
   const remain = randInt(TWIST_COUNT_MIN, TWIST_COUNT_MAX);
+  gameData.twistSpawnedSlot = slot ? slot.from : 0; // 同大量出没：这一段已经生成过，打光后不再重刷
   gameData.twist = {
     edge, t,                       // 事件路段 + 事件点在路段上的位置比例
     slotFrom: slot ? slot.from : 0, // 来源排期段的起点（0 = 本地随机兜底），用来识别过期的旧事件
@@ -440,11 +443,11 @@ export function twistTick() {
   const now = hasSchedule() ? serverNow() : Date.now();
   if (!gameData.twist?.active) {
     updateTwistOverlay(); // 事件结束/不存在：确保遮罩收起
-    // 有排期时生成时刻完全由排期说了算（同大量出没，见 massTick 注释）
+    // 有排期时生成时刻完全由排期说了算，且同一段只生成一次（见 massTick 注释）
     if (hasSchedule()) {
       const cur = activeSlot('twist');
-      const nxt = cur || nextSlot('twist');
-      gameData.twistNextGenAt = nxt ? nxt.from : now + 60000;
+      const p = cur && gameData.twistSpawnedSlot !== cur.from ? cur : nextSlot('twist');
+      gameData.twistNextGenAt = p ? p.from : now + 60000;
     }
     if (now >= gameData.twistNextGenAt) spawnTwist();
     return;
