@@ -22,7 +22,7 @@ import { endCycling } from './audio.js';
 import { MAP_EDGES, showGpsView } from './gps.js';
 import { startMassEncounter, startTwistEncounter, scheduleNextEncounter } from './battle.js';
 import { notifyMassStart, notifyMassEnd, massMsgTick, notifyTwistStart, notifyTwistEnd, twistMsgTick } from './messages.js';
-import { pickFamily, pickWeightedPokemon } from './items.js';
+import { pickFamily, pickFamilyBySeed, pickWeightedPokemon } from './items.js';
 import { hasSchedule, activeSlot, nextSlot, serverNow } from './server-events.js';
 
 // 扭曲池跨地区、条目多：均匀随机会让神兽过密（约占 7.5%），按稀有度加权后降到 2% 左右
@@ -97,11 +97,10 @@ function spawnMassOutbreak() {
     gameData.massNextGenAt = Date.now() + randInt(10, 30) * 60000; // 该地区无精灵则稍后重试
     return;
   }
-  // 家族归一：多变体家族（未知图腾、彩粉蝶等）按单个形态计，不因形态数叠加
-  // 有排期时用排期定死的那只（全服一致）；本地池里没有就退回家族随机
-  // 有排期时按种子取同一只（全服一致）；种子缺失/越界就退回家族随机
+  // 家族归一：多变体家族（未知图腾、彩粉蝶、花叶蒂这类）先折成一簇，抽到这一簇再在簇内二次抽一只，
+  // 不因形态数叠加放大。有排期时整条路径只由种子决定，全服看到同一只
   const poke = (slot && typeof slot.seed === 'number')
-    ? pool[slot.seed % pool.length]
+    ? pickFamilyBySeed(pool, slot.seed)
     : pickFamily(pool, () => 1);
   const pokeOrFamily = poke && poke.index ? poke : pickFamily(pool, () => 1);
   const remain = randInt(MASS_COUNT_MIN, MASS_COUNT_MAX);

@@ -163,17 +163,19 @@ function saveEvents() {
   } catch (e) { console.warn('[server] 事件排期落盘失败', e.message); }
 }
 
-// 保证有今天的排期，并只留最近两天
+// 保证「今天 + 明天」两份都在，并只留这两天。
+// 次日排期提前一整天备好：轴是水平滑动的，23 点后窗口会跨到次日，到点才生成会留一段空白。
 function ensureEvents(nowMs = Date.now()) {
   const key = dateKey(nowMs);
   let changed = false;
-  if (!eventDb.days[key]) {
-    const base = new Date(nowMs);
+  for (const [k, ts] of [[key, nowMs], [dateKey(nowMs + DAY_MS), nowMs + DAY_MS]]) {
+    if (eventDb.days[k]) continue;
+    const base = new Date(ts);
     base.setHours(0, 0, 0, 0);
-    const data = buildDay(key, base.getTime());
-    eventDb.days[key] = data;
+    const data = buildDay(k, base.getTime());
+    eventDb.days[k] = data;
     changed = true;
-    console.log(`[server] 已生成 ${key} 事件排期：大量出没 ${data.mass.length} 场 / 时空扭曲 ${data.twist.length} 场`);
+    console.log(`[server] 已生成 ${k} 事件排期：大量出没 ${data.mass.length} 场 / 时空扭曲 ${data.twist.length} 场`);
   }
   const keys = Object.keys(eventDb.days).sort();
   for (const k of keys.slice(0, Math.max(0, keys.length - EVENT_KEEP_DAYS))) {
@@ -182,6 +184,14 @@ function ensureEvents(nowMs = Date.now()) {
   }
   if (changed) saveEvents();
   return eventDb.days[key] || null;
+}
+
+// 对外排期：今天 + 明天平铺成一个按开始时刻排序的列表。
+// 客户端与官网都按绝对时间戳判断，拿到连续两天就等于轴滑到哪儿都有数据。
+function mergedSchedule(nowMs = Date.now()) {
+  const days = [eventDb.days[dateKey(nowMs)], eventDb.days[dateKey(nowMs + DAY_MS)]];
+  const cat = (k) => days.flatMap((d) => d?.[k] || []).sort((a, b) => a.from - b.from);
+  return { date: dateKey(nowMs), mass: cat('mass'), twist: cat('twist') };
 }
 
 // 跨天时自动换页：日期没变就直接返回，不做多余 IO
@@ -242,8 +252,9 @@ const ROUTES = [
     method: 'GET',
     path: '/api/events',
     handle(req, res) {
-      const data = ensureEvents();
-      if (!data) return json(res, 503, { ok: false });
+      ensureEvents();
+      const data = mergedSchedule();
+      if (!data.mass.length && !data.twist.length) return json(res, 503, { ok: false });
       json(res, 200, { ...data, serverNow: Date.now() }, {
         'Access-Control-Allow-Origin': '*',      // 公开只读数据，官网/客户端都能取
         'Cache-Control': 'public, max-age=60',   // 客户端自己会缓存整天，这层只防连点
