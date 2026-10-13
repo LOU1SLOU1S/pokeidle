@@ -33,6 +33,7 @@ import { backFromBattlePick, isBattlePicking, migrateTeams, isTeamEditing, close
 import { showCasinoView } from './casino.js';
 import * as road from './road.js';
 import { initBackgroundCatchup, startBackgroundCatchup, bgCatchupEnabled, bgTakeAccum, bgTakeBike, bgTakeBuffRemainingMs, seedBgOfflineSeconds, bgPeekAccum } from './background-catchup.js';
+import { startEventRefresh } from './server-events.js';
 
 let ROAD_PRESETS = null;
 let ROAD_ALL = []; // 真正能当路段用的下标（road-data.json 里还混着场景地图，见下面筛选）
@@ -1522,6 +1523,7 @@ async function init() {
     onShown: (awaySec) => settleStaleEncounter(awaySec).catch(() => {}),
   });
   startBackgroundCatchup();
+  startEventRefresh(); // 全服事件排期：先吃缓存再拉最新（拉不到就退回本地随机事件）
 
   // 回前台：后台期间遭遇可能已结算完，校准战斗曲，避免残留的战斗曲与地区曲叠加播放
   document.addEventListener('visibilitychange', () => {

@@ -5579,7 +5579,7 @@ html.mobile-app #quitHide { display: none !important; }
 }
 .roster-hex {
   width: 90px;
-  height: 90px;
+  height: 79px;
   flex-shrink: 0;
   display: block;
 }
@@ -6480,6 +6480,7 @@ html.mobile-app #quitHide { display: none !important; }
   gap: 6px;
   margin-bottom: 2px;
 }
+.roster-detail-title-row .roster-release { padding: 1px 6px; font-size: 9px; }
 
 /* === 开场剧情 === */
 #introView {
@@ -6810,6 +6811,8 @@ body.booting { visibility: hidden; }
   .casino-history-btn:hover { background: rgba(var(--ui-color-rgb),0.12); }
 }
 .casino-history-btn:active { transform: translateY(-50%) scale(0.92); }
+/* 下注页左上角的难度切换：复用战绩按钮样式，镜像到左侧与它对称 */
+.mj-diff-btn { left: 8px; right: auto; }
 /* 下注档位：点击式刻度条（圆点可点击选择，选中档位上方浮出糖果 icon） */
 .casino-bet-slider {
   display: flex;

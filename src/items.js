@@ -651,7 +651,8 @@ export function spawnItemDrop(itemKey, opts = {}) {
     // 清场但照常收下：直接入账并记掉落日志
     if (opts.collect) grantItem(itemKey, qty);
     saveGame();
-    if (phase === 'idle') { setIdleCharacter('walk'); road.resume(); }
+    setIdleCharacter('walk');            // 姿势必须收回走路：动画收尾被战斗打断时不会卡在动作帧
+    if (phase === 'idle') road.resume();   // 路面恢复交给战斗/goIdle 统一处理
   };
 
   // 动画受理成功：后续由 step/fly 驱动滚动与拾取入账，这里返回 true 让调用方扣减累积值
@@ -710,7 +711,8 @@ export function spawnItemDrop(itemKey, opts = {}) {
     setItemDropActive(false);
     gameData.roadItem = null; // 滑出屏/异常回收：这一件不再恢复
     saveGame();
-    if (phase === 'idle') { setIdleCharacter('walk'); road.resume(); }
+    setIdleCharacter('walk');            // 姿势必须收回走路：动画收尾被战斗打断时不会卡在动作帧
+    if (phase === 'idle') road.resume();   // 路面恢复交给战斗/goIdle 统一处理
   }
 
   // 世界步（每步一次，与路面同速）：位置推进 + 拾取判定
@@ -766,7 +768,8 @@ export function spawnItemDrop(itemKey, opts = {}) {
           _dropEl = null;
           el.remove();
           setItemDropActive(false);
-          if (phase === 'idle') { setIdleCharacter('walk'); road.resume(); }
+          setIdleCharacter('walk');            // 姿势必须收回走路：动画收尾被战斗打断时不会卡在动作帧
+          if (phase === 'idle') road.resume();   // 路面恢复交给战斗/goIdle 统一处理
           gameData.roadItem = null; // 已拾取：清档
           grantItem(itemKey, qty);
           saveGame(); // 拾取入账立即存档，避免刷新时丢失最新掉落日志/道具
