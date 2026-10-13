@@ -187,6 +187,7 @@ function currentFilterPool() {
     if (adv.src) pool = pool.filter(p =>
       adv.src === 'normal' ? p.source === 'normal'
         : adv.src === 'mass' ? p.source === 'mass' : p.source === adv.src);
+    if (adv.ball) pool = pool.filter(p => p.ball === adv.ball);
     if (adv.legend) {
       pool = pool.filter(p => {
         const isLegend = getPokemonByIndex(String(p.species))?.legend === true;
@@ -1856,6 +1857,9 @@ function advFilterHtml() {
         <div class="adv-group"><div class="adv-group-name">进化</div><div class="adv-chips">
           ${chip('evolvable', '', '不限')}${chip('evolvable', '1', '可进化')}
         </div></div>
+        <div class="adv-group"><div class="adv-group-name">球种</div><div class="adv-chips">
+          ${chip('ball', '', '不限')}${chip('ball', 'master-ball', '大师球')}
+        </div></div>
         <div class="adv-group adv-span2"><div class="adv-group-name">来源</div><div class="adv-chips">
           ${ADV_SRCS.map(([v, l]) => chip('src', v, l)).join('')}
         </div></div>
@@ -2029,6 +2033,7 @@ function bindAdvFilter(panel) {
       gender: getChips('gender'),
       ivCount: getChips('ivcount'),
       evolvable: getChips('evolvable'),
+      ball: getChips('ball'),
     };
     if (_advFilter.evolvable) ensureEvoDataForFilter();
     syncAdvFilterUi();
@@ -2079,7 +2084,7 @@ function removeAdvBadge(F, k) {
 
 // 所有条件均为默认/不限时视为空筛选：恢复到未启用状态
 function advIsEmpty(F) {
-  return !(F.poke || F.q || F.legend || F.shiny || F.variant || F.src || F.gender || F.evolvable
+  return !(F.poke || F.q || F.legend || F.shiny || F.variant || F.src || F.gender || F.evolvable || F.ball
     || (F.type && F.type.length) || F.region
     || (Number(F.lvMin) > 0) || (Number(F.lvMax) < 100)
     || (Number(F.ivMin) > 0) || (Number(F.ivMax) < 186)
@@ -2102,6 +2107,7 @@ function advFilterBadges(F) {
   if (F.variant === 'rgb') parts.push({ k: 'variant', t: 'RGB' });
   if (F.variant === 'polluted') parts.push({ k: 'variant', t: '污染' });
   if (F.src) parts.push({ k: 'src', t: ADV_SRC_NAMES[F.src] || F.src });
+  if (F.ball === 'master-ball') parts.push({ k: 'ball', t: '大师球捕获' });
   if (F.type && F.type.length) parts.push({ k: 'type', t: F.type.join('+') });
   if (F.region) parts.push({ k: 'region', t: F.region });
   const lvMin = Number(F.lvMin), lvMax = Number(F.lvMax);

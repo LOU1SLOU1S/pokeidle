@@ -101,7 +101,7 @@ export function endMassOutbreak() {
     gameData.gps.massArrived = false;
     // 事件结束且玩家正骑行导航到该事件点：目的地已失效，手动骑行立即下车。
     // 否则会停在「骑行中 + 地图禁止改选目的地（planRoute 拦截）+ 取消按钮不显示（hasDest=false）」
-    // 的不可操作死锁状态；forceStopBikeInMassZone 依赖 massOutbreak.active，此刻已失效，必须在此兜底。
+    // 的不可操作死锁状态，必须在此兜底。
     if (hadMassTarget && road.isManualBike()) {
       road.setManualBike(false);
     }
@@ -303,21 +303,7 @@ function updateMassSpawner(now) {
     return;
   }
   // 注意不含 road.isActive()：拾取道具等道路暂停时保持注册，由 _massStep 原地等待，避免捡完球 icon 消失
-  // 大量出没事件点可能落在自行车路段上：骑行中事件宝可梦不滚动、普通遭遇也不触发，
-  // 玩家到了点位却在骑车会错过事件。进入事件区域立即强制下车，恢复正常遭遇等非骑行功能。
-  forceStopBikeInMassZone();
   startMassRaf();
-}
-
-// 大量出没区域内强制结束骑行状态（自行车路段 _bike 和/或手动骑行 _manualBike）
-function forceStopBikeInMassZone() {
-  if (!road.isBike()) return;
-  // 先清路段骑行状态，再清手动骑行：onManualBikeChanged 回调里 road.isBike() 已是 false，
-  // 骑行音乐 / 角色外观 / 存档 / 背包槽 / buff 禁用都会按「下车」正确处理
-  road.setBike(false);
-  if (road.isManualBike()) road.setManualBike(false);
-  endCycling();             // 兜底：停止骑行音乐
-  setIdleCharacter('walk'); // 恢复走路外观与速度
 }
 
 // ===== 时空扭曲（跨地区稀有事件）=====
@@ -619,15 +605,5 @@ function updateTwistSpawner(now) {
     if (Date.now() >= tw.nextSpawnAt) backgroundHitTwist();
     return;
   }
-  forceStopBikeInTwistZone();
   startTwistRaf();
-}
-
-// 时空扭曲区域内强制结束骑行状态（同大量出没）
-function forceStopBikeInTwistZone() {
-  if (!road.isBike()) return;
-  road.setBike(false);
-  if (road.isManualBike()) road.setManualBike(false);
-  endCycling();
-  setIdleCharacter('walk');
 }

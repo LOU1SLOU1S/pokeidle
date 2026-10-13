@@ -4,7 +4,7 @@ import { phase, gameData, allPokemon, getPokemonByIndex, isPowerForm, isWildExcl
 import { $, updateTextBox, updateBackpack, updateStats, showView, isOnHatchView, isIdleStageVisible, isPageHidden, fitPokemonImage, tryLoadPokemonImage, setIdleCharacter, renderIncubatorView, updateIncubatorBadge, showConfirmBar, hideConfirmBar, isEvolutionShowActive } from './ui.js';
 import { showIdlePickup, showBuffExpired } from './messages.js';
 import { animate, burstShinySparkle } from './animation.js';
-import { computeObtainScore } from './scoring.js';
+import { computeObtainScore, recordLuck } from './scoring.js';
 import { NATURES } from './battle-core.js';
 import { playCongratulation, stopCongratulation, playShiny } from './audio.js';
 import * as road from './road.js';
@@ -926,11 +926,11 @@ function applyHatchEntry(slotIndex, presetGender) {
   gameData.encounterLogs[idx].push({
     time: Date.now(), shiny: eggIsShiny, result: 'caught', balls: {}, source: 'egg', // source 供统计页区分孵蛋/交换/遭遇
     charmBuff: false, // 闪耀护符不提升孵蛋闪光率（蛋的闪光在放入孵蛋器时已按 1/1000 判定），恒为 false
-    score: computeObtainScore({
+    score: recordLuck(gameData, computeObtainScore({
       pokemon: poke, source: 'egg', shiny: eggIsShiny,
       charmBuff: false, honeyBuff: false, balls: {}, finalRate: 1,
       ivs: entry.ivs, ivRandomKey,
-    }),
+    })),
   });
 
   addSystemLog('egg_hatch', { pokemon: poke.index, shiny: eggIsShiny });

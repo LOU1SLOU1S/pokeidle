@@ -1529,7 +1529,7 @@ export function consoleLayerStyle() {
 
 export function showFoodTip(text, x, y) {
   const tip = getFoodTipEl();
-  tip.textContent = text;
+  tip.innerHTML = text; // 允许内联图标（如饲育屋 tip 里的彩色性别 svg）；文案同其它位置一样直接进 HTML
   // 多行文案（含 \n）时按行折行，单行文案保持 nowrap（如树果 tooltip）
   tip.style.whiteSpace = text.includes('\n') ? 'pre-line' : '';
   tip.style.display = '';

@@ -1,11 +1,11 @@
-import { ENCOUNTER_MIN, ENCOUNTER_MAX, BUFF_ENCOUNTER_MIN, BUFF_ENCOUNTER_MAX, BLOCK_TARGET_CHANCE, BLOCK_QUALITY, SHINY_CHANCE, CHARM_SHINY_CHANCE, CHARM_UNCAUGHT_CHANCE, CHARM_RARITY_BOOST, ITEM_NAMES, CATCH_RATES, ULTRA_BALL_ADD, AUTO_FLEE_TIMEOUT, AUTO_FLEE_NO_BALL_DELAY, FLEE_CHANCE, FLEE_CHANCE_INC, FLEE_CHANCE_MAX, CANDY_EXCHANGE, TWIST_SHINY_CHANCE, TWIST_GUARANTEED_IVS, LEGEND_LEVEL, massShinyChance } from './config.js';
+import { ENCOUNTER_MIN, ENCOUNTER_MAX, BUFF_ENCOUNTER_MIN, BUFF_ENCOUNTER_MAX, BLOCK_TARGET_CHANCE, BLOCK_QUALITY, SHINY_CHANCE, CHARM_SHINY_CHANCE, CHARM_UNCAUGHT_CHANCE, CHARM_RARITY_BOOST, ITEM_NAMES, CATCH_RATES, ULTRA_BALL_ADD, AUTO_FLEE_TIMEOUT, AUTO_FLEE_NO_BALL_DELAY, FLEE_CHANCE, FLEE_CHANCE_INC, FLEE_CHANCE_MAX, CANDY_EXCHANGE, TWIST_SHINY_CHANCE, TWIST_GUARANTEED_IVS, LEGEND_LEVEL, massShinyChance, AUTO_CATCH_BALLS_DEFAULT } from './config.js';
 import { phase, gameData, allPokemon, getPokemonByIndex, isPowerForm, isWildExcluded, currentEncounter, currentIsShiny, encounterLevel, encounterBallsUsed, currentEncounterBalls, nextEncounterTimer, honeyBuffActive, charmBuffActive, charmGuaranteed, blockBuffActive, blockRecipe, blockQuality, honeyCountdownEnd, charmCountdownEnd, honeyPausedRemaining, charmPausedRemaining, honeyExpiryTimer, charmExpiryTimer, honeyCountdownInterval, charmCountdownInterval, _charmEncounterCount, _autoFleeTimer, _autoFleeStartTime, _autoFleeBarInterval, _autoCatching, _throwing, _fishing, _eggHatching, encounterMsg, encounterSource, encounterVariant, saveGame, addSystemLog, getCurrentRegion, hasAnyBall, rand, randInt, setSaveSuspended, inMassZone, inTwistZone, rollGuaranteedIvs, setPhase, setCurrentEncounter, setEncounterLevel, setCurrentIsShiny, setEncounterBallsUsed, setCurrentEncounterBalls, setHoneyBuffActive, setCharmBuffActive, setCharmGuaranteed, setCharmEncounterCount, setHoneyPausedRemaining, setCharmPausedRemaining, setHoneyCountdownEnd, setCharmCountdownEnd, setNextEncounterTimer, setAutoCatching, setThrowing, setCatchConfirmStep, setAutoFleeTimer, setAutoFleeStartTime, setAutoFleeBarInterval, setHoneyExpiryTimer, setCharmExpiryTimer, setHoneyCountdownInterval, setCharmCountdownInterval, setEncounterMsg, addRosterEntry, setLastObtainedEntryId, rollGender, genderBadge, wildLevelCap, dexUnlocked, dexShinyOwned, setEncounterSource, setEncounterVariant, simNow, setSimClock } from './state.js';
 import { $, showView, updateTextBox, hideTextBox, setIdleCharacter, isOnGameView, isIdleStageVisible, isDualLayout, isPageHidden, updateBackpack, updateStats, tryLoadPokemonImage, tryLoadPokemonIcon, isEvolutionShowActive } from './ui.js';
 import { getBountyTargetIndexes } from './bounty.js';
 import { pickRandomPokemon, pickWeightedPokemon, findBerryTarget, rollLegendEncounter, activateHoney, activateShinyCharm, clearCharmCountdown, clearHoneyCountdown, startCharmCountdown, startHoneyCountdown, handleHoneyExpired, handleCharmExpired, takeBuffForRenew, TYPE_COLORS, cancelSuspendedEncounterForEgg, pickFamily } from './items.js';
 import { eatBlock } from './mixer.js';
 import { delay, playCatchSequence, playFleeAnim, startShinySparkleLoop, stopShinySparkleLoop } from './animation.js';
-import { catchBonusFor, computeObtainScore, computeMeetScore } from './scoring.js';
+import { catchBonusFor, computeObtainScore, computeMeetScore, recordLuck } from './scoring.js';
 import { startIdleRotation } from './messages.js';
 import { playBattle, endBattle, playVictory, stopVictory, consumeShowCardOnEncounterEnd, showRegionNowPlaying, playShiny, setBulkQuiet } from './audio.js';
 import * as road from './road.js';
@@ -943,6 +943,7 @@ export async function throwBall(ballType) {
         ivs: _encounterSource === 'twist' ? rollGuaranteedIvs(currentEncounter.legend ? 3 : TWIST_GUARANTEED_IVS) : undefined,
         variant: _encounterVariant,
         at: _encounterAt, // 跨界遭遇：按切走时刻入档
+        ball: ballType,   // 捕获球种（高级筛选「球种」按它筛）
       });
       setLastObtainedEntryId(entry.id);
       // 记录遭遇日志（score 含个体值加成，需先建档拿到 ivs）
@@ -951,12 +952,12 @@ export async function throwBall(ballType) {
         time: encounterStamp(), shiny: currentIsShiny, result: 'caught',
         balls: { ...currentEncounterBalls }, source: _encounterSource,
         charmBuff: charmBuffActive, // 该遭遇是否处于闪耀护符 buff（影响闪光率评分）
-        score: computeObtainScore({
+        score: recordLuck(gameData, computeObtainScore({
           pokemon: currentEncounter, source: _encounterSource, shiny: currentIsShiny,
           charmBuff: charmBuffActive, honeyBuff: honeyBuffActive,
           balls: currentEncounterBalls, finalRate: rate, ivs: entry.ivs,
           guaranteedIvs: _encounterSource === 'twist' ? (currentEncounter.legend ? 3 : TWIST_GUARANTEED_IVS) : 0,
-        }),
+        })),
       });
       addSystemLog('pokemon_caught', { pokemon: idx, shiny: currentIsShiny, ball: ballType, auto: _autoCatching }, encounterStamp());
     } else if (outcome === 'fled') {
@@ -970,10 +971,10 @@ export async function throwBall(ballType) {
         balls: { ...currentEncounterBalls }, source: _encounterSource,
         charmBuff: charmBuffActive,
         // 未获得宝可梦：score 记"相遇欧气分"（遇到稀有本身也值得加分，无 buff 更高）
-        score: computeMeetScore({
+        score: recordLuck(gameData, computeMeetScore({
           pokemon: currentEncounter, source: _encounterSource, shiny: currentIsShiny,
           charmBuff: charmBuffActive, honeyBuff: honeyBuffActive,
-        }),
+        })),
       });
       addSystemLog('pokemon_escaped', { pokemon: idx, shiny: currentIsShiny, auto: _autoCatching }, encounterStamp());
     }
@@ -1005,7 +1006,7 @@ export async function throwBall(ballType) {
 
     if (outcome === 'caught') {
       // 不在游戏页：快照结果，切回后补播演出
-      if (!isOnGameView()) { storeBgResult('caught', breakRound, ballType); cleanupEncounterState(); return; }
+      if (!isOnGameView()) { storeBgResult('caught', breakRound, ballType); cleanupEncounterState(); setPhase('idle'); return; }
       endBattle(); // 战斗结束：捕捉成功即停战斗曲，胜利音效播完后恢复地区曲
       playVictory(); // 抓捕成功 → 胜利音效
       // 捕获文案（离开遇敌页则不弹出）
@@ -1039,7 +1040,7 @@ export async function throwBall(ballType) {
 
     if (outcome === 'fled') {
       // 不在游戏页：快照结果，切回后补播演出
-      if (!isOnGameView()) { storeBgResult('fled', breakRound, ballType); cleanupEncounterState(); return; }
+      if (!isOnGameView()) { storeBgResult('fled', breakRound, ballType); cleanupEncounterState(); setPhase('idle'); return; }
       // 先显示挣脱文案（离开遇敌页则不弹）
       const m = breakMsgs[breakRound] || breakMsgs[1];
       if (isOnGameView()) updateTextBox(m[randInt(0, m.length - 1)], false);
@@ -1085,7 +1086,7 @@ export async function fleeEncounter(isAutoFlee) {
     time: encounterStamp(), shiny: currentIsShiny, result: 'fled',
     balls: { ...currentEncounterBalls }, source: _encounterSource,
     charmBuff: charmBuffActive,
-    // 主动逃跑（手动 / 佛系自动）属于玩家策略选择，不参与欧气评定
+    // 主动逃跑（手动 / 佛系自动）属于玩家策略选择，不参与欧气评定（所以不进 recordLuck 窗口）
     selfFlee: true,
     // 未获得宝可梦：score 记"相遇欧气分"（遇到稀有本身也值得加分，无 buff 更高）
     score: computeMeetScore({
@@ -1424,7 +1425,7 @@ export async function autoCatch() {
 
   while (currentEncounter && gameData.settings?.autoCatch && (_encPhase === 'encounter' || _bgCatch)) {
     // 智能选球：根据精灵捕获率决定使用哪种球
-    const enabledBalls = gameData.settings?.autoCatchBalls || { 'poke-ball': true, 'ultra-ball': true, 'master-ball': true };
+    const enabledBalls = gameData.settings?.autoCatchBalls || AUTO_CATCH_BALLS_DEFAULT;
     let availableBalls = ['poke-ball', 'ultra-ball', 'master-ball'].filter(b => enabledBalls[b] !== false && (gameData.items[b]||0) > 0);
     let ballType = availableBalls.length > 0 ? pickAutoBallType(availableBalls) : null;
 
@@ -1446,7 +1447,7 @@ export async function autoCatch() {
         time: encounterStamp(), shiny: currentIsShiny, result: 'fled',
         balls: { ...currentEncounterBalls }, manual: false, source: _encounterSource,
         charmBuff: charmBuffActive,
-        // 无球自动逃跑属于自动操作策略，不参与欧气评定
+        // 无球自动逃跑属于自动操作策略，不参与欧气评定（所以不进 recordLuck 窗口）
         selfFlee: true,
         // 未获得宝可梦：score 记"相遇欧气分"（遇到稀有本身也值得加分，无 buff 更高）
         score: computeMeetScore({
@@ -1461,6 +1462,7 @@ export async function autoCatch() {
         // 后台结算：判定已落库，快照结果供玩家切回游戏页时补播逃跑文案
         storeBgResult('fled', 0, null, { noBall: true, fleeMsg: '你逃走了！' });
         cleanupEncounterState();
+        setPhase('idle'); // 同前两处：后台分支必须自己收尾，否则挂机推进卡死
       } else {
         if (isOnGameView() && !document.hidden && !_bgCatchup) {
           updateTextBox('你逃走了！', false);
