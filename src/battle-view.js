@@ -2792,7 +2792,7 @@ export function rollTierDrops(tier) {
     if (r.chance != null && Math.random() >= r.chance) continue;
     let key = r.key;
     if (r.pool === 'evoAll') {
-      key = pickEvoDrop() || r.key; // 全池等概率抽（王冠与薄荷同级）
+      key = pickEvoDrop() || r.key; // 全池走稀有度权重（王冠被压低）
     } else if (r.pool) {
       const pool = r.pool === 'mint' ? MINT_KEYS : BATTLE_EVO_POOLS[r.pool] || null;
       if (pool && pool.length) key = pool[randInt(0, pool.length - 1)];
