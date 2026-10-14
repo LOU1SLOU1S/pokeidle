@@ -974,8 +974,9 @@ export async function throwBall(ballType) {
       // 一律走 goIdle（恢复道路 / 清理遭遇 / 恢复遇敌调度），不再有"只清理不恢复道路"的分支
       if (_bgCatch || _autoCatching || !onView) {
         if (onView) { await delay(300); stopVictory(); } // 离开游戏页时确认框不可见、无人点按钮，这里直接收尾
-        // 孵蛋动画进行中：判定已落库，只清理现场不切视图，等孵蛋结束后统一回空闲
-        if (_eggHatching || phase === 'eggResult' || isEvolutionShowActive()) { cleanupEncounterState(); return; }
+        // 孵蛋 / 进化演出进行中：单屏时演出占着唯一的屏，只清理现场不切视图（等演出结束再回空闲）；
+        // 双屏时演出在下屏、上屏归上屏，照常 goIdle 让上屏回挂机（showView 只切舞台通道，不会动下屏）
+        if (!isDualLayout() && (_eggHatching || phase === 'eggResult' || isEvolutionShowActive())) { cleanupEncounterState(); return; }
         goIdle();
       }
       return;
@@ -996,8 +997,9 @@ export async function throwBall(ballType) {
       updateStats();
       // 宝可梦水平翻转并向右下平移出屏
       if (onView) { await playFleeAnim(); await delay(300); }
-      // 孵蛋动画进行中：判定已落库，只清理现场不切视图，等孵蛋结束后统一回空闲
-      if (_eggHatching || phase === 'eggResult' || isEvolutionShowActive()) { cleanupEncounterState(); return; }
+      // 孵蛋 / 进化演出进行中：单屏时演出占着唯一的屏，只清理现场不切视图（等演出结束再回空闲）；
+      // 双屏时演出在下屏、上屏归上屏，照常 goIdle 让上屏回挂机（showView 只切舞台通道，不会动下屏）
+      if (!isDualLayout() && (_eggHatching || phase === 'eggResult' || isEvolutionShowActive())) { cleanupEncounterState(); return; }
       goIdle();
       return;
     }
@@ -1053,8 +1055,9 @@ export async function fleeEncounter(isAutoFlee) {
   }
   if (_bgCatchup) { goIdle(); return; } // 后台补算：跳过延迟直接收尾
   setTimeout(() => {
-    // 孵蛋动画进行中：判定已落库，只清理现场不切视图，等孵蛋结束后统一回空闲
-    if (_eggHatching || phase === 'eggResult' || isEvolutionShowActive()) { cleanupEncounterState(); return; }
+    // 孵蛋 / 进化演出进行中：单屏时演出占着唯一的屏，只清理现场不切视图（等演出结束再回空闲）；
+    // 双屏时演出在下屏、上屏归上屏，照常 goIdle 让上屏回挂机（showView 只切舞台通道，不会动下屏）
+    if (!isDualLayout() && (_eggHatching || phase === 'eggResult' || isEvolutionShowActive())) { cleanupEncounterState(); return; }
     goIdle();
   }, isAutoFlee ? 300 : 1200);
 }
@@ -1416,8 +1419,9 @@ export async function autoCatch() {
           updateTextBox('你逃走了！', false);
           await delay(1500);
         }
-        // 孵蛋动画进行中：判定已落库，只清理现场不切视图，等孵蛋结束后统一回空闲
-        if (_eggHatching || phase === 'eggResult') { cleanupEncounterState(); }
+        // 孵蛋 / 进化演出进行中：单屏时演出占着唯一的屏，只清理现场不切视图（等演出结束再回空闲）；
+        // 双屏时演出在下屏、上屏归上屏，照常 goIdle 让上屏回挂机（showView 只切舞台通道，不会动下屏）
+        if (!isDualLayout() && (_eggHatching || phase === 'eggResult')) { cleanupEncounterState(); }
         else goIdle();
       }
       break;
