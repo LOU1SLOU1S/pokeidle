@@ -15,7 +15,9 @@ const CACHE = 'pokeidle-hot';
 const MANIFEST_KEY = '/__hot__.json';   // 缓存里存"已应用"的 { 相对路径: hash }
 const META_KEY = 'pokeidle_hot_v1';     // 应用记录（文件数/时间），给调试看
 const CONCURRENCY = 4;
-const SKIP = new Set(['res-manifest.json', 'sw.js']);   // 这两个永远用包里的（SW 不能被自己替换）
+// 这几个永远用包里的：SW 不能被自己替换；res-manifest.json 是基线；build-info.js 里是版本号和
+// DEV 开关——被热更成 DEV=true 的一版就会关掉热更、把客户端锁死在开发态（自己清不掉）
+const SKIP = new Set(['res-manifest.json', 'sw.js', 'build-info.js']);
 
 let _busy = false;
 let _skippedGen = 0;   // 本次运行取消/没下成的清单 gen：只在内存里，大退重进还会再问

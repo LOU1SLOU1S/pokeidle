@@ -64,3 +64,7 @@ src/res-manifest.json
 
 # 热更基线（tools/build-release.mjs 出包时写，deploy-res.mjs 算差异用）
 tools/hot-baseline.json
+
+# 热更手工上传的暂存（tools/deploy-res.mjs --local 生成）
+hot-upload/
+hot-upload.tar.gz

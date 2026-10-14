@@ -1,9 +1,12 @@
 // ===== 热更 Service Worker =====
 // 作用：把"下载到本地缓存里的新文件"优先返回给页面，没有的照常走网络（也就是包里的原文件）。
 // 只接管本应用自己的 GET 请求；跨域（比如服务器 API）一律放行。
-// 缓存名固定，内容由 hot-update.js 维护；清单本身（res-manifest.json）永远走包里那份。
+// 缓存名固定，内容由 hot-update.js 维护；清单和版本开关永远走包里那份。
 const CACHE = 'pokeidle-hot';
 const MANIFEST_KEY = '/__hot__.json';   // 已应用的 { 相对路径: hash }
+// build-info.js 里是版本号和 DEV 开关：被热更成 DEV=true 的一版，客户端会关掉热更、停在开发态，
+// 而且因为热更关了，它自己再也清不掉缓存里那份 —— 死锁。所以这两个文件永远从包里取。
+const BYPASS = new Set(['res-manifest.json', 'build-info.js']);
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
@@ -35,7 +38,7 @@ self.addEventListener('fetch', (e) => {
 async function serve(req, url) {
   try {
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-    if (rel && rel !== 'res-manifest.json' && !rel.startsWith('__hot__')) {
+    if (rel && !BYPASS.has(rel) && !rel.startsWith('__hot__')) {
       const map = await loadApplied();
       if (map && map[rel]) {
         const hit = await (await caches.open(CACHE)).match(`${self.location.origin}/${rel}`);

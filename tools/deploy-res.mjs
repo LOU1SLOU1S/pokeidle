@@ -6,11 +6,12 @@
 // 用法（项目根目录）：
 //   node tools/deploy-res.mjs            生成清单 + 补齐差异文件 + 传清单 + 自检
 //   node tools/deploy-res.mjs --dry      只看要传哪些文件，不连服务器
+//   node tools/deploy-res.mjs --local    把要传的文件铺到 hot-upload/（项目根目录，已 gitignore），手工上传用
 //   node tools/deploy-res.mjs --all      不管差异，清单里所有文件全传一遍（换机器/重建服务器时用）
 //
 // 依赖 tools/deploy.config.json（和 deploy-web.mjs 共用）：key / host / user / port / hotDir / apiBase
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, copyFileSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -37,7 +38,7 @@ function run(cmd, tries = 2) {
     const r = spawnSync(cmd, { shell: true, stdio: 'inherit', cwd: ROOT });
     if (r.status === 0) return;
     if (r.status === 255 && i < tries) { console.log('      连不上 22 端口（多半是连太密被服务器暂时拉黑了），等 20 秒再试一次'); sleepSync(20000); continue; }
-    if (r.status === 255) console.error('      还是连不上：443 的官网/接口正常的话，就是 SSH 被临时封了，过几分钟再跑本命令（别连续重试，会续期）');
+    if (r.status === 255) console.error('      还是连不上：443 的官网/接口正常的话，就是 SSH 被临时封了，过几分钟再跑本命令（别连续重试，会续期）；急着发就用 --local 铺到本地手工传');
     console.error(`命令失败（${r.status}）：${cmd.slice(0, 70)}…`);
     process.exit(1);
   }
@@ -87,6 +88,34 @@ if (dry) {
   for (const p of need.slice(0, 40)) console.log(`      · ${p}  ${kb(local.files[p].size)}`);
   if (need.length > 40) console.log(`      … 其余 ${need.length - 40} 个`);
   console.log('[3/3] --dry：不连服务器，结束');
+  process.exit(0);
+}
+
+// --local：不连服务器，把"要传的文件 + 改名后的清单"铺到一个本地目录，手动往宝塔面板里传
+if (args.includes('--local')) {
+  const li = args.indexOf('--local');
+  const dir = args[li + 1] && !args[li + 1].startsWith('--') ? resolve(args[li + 1]) : join(ROOT, 'hot-upload');
+  rmSync(dir, { recursive: true, force: true });   // 清掉上次铺的，免得把已经不需要的文件一起传上去
+  rmSync(join(ROOT, 'hot-upload.tar.gz'), { force: true });
+  mkdirSync(dir, { recursive: true });
+  for (const rel of need) {
+    const to = join(dir, rel);
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(join(SRC, rel), to);
+  }
+  copyFileSync(MANIFEST, join(dir, 'manifest.json'));   // 服务器上这份要叫 manifest.json
+  console.log(`[3/3] --local：${need.length} 个文件 + 清单已铺到 ${dir}`);
+  for (const rel of need) {
+    const buf = readFileSync(join(dir, rel));
+    console.log(`      ${rel}  ${kb(buf.length)}  ${sha1(buf) === local.files[rel].hash ? '✔' : '✘ 拷贝损坏'}`);
+  }
+  console.log(`      传到 ${hotDir}/：先传上面这些文件，最后传 manifest.json（顺序不能反）`);
+  if (need.includes('build-info.js')) console.log('      ⚠ build-info.js 也在列表里：传了，老包玩家设置页会显示新版号（无害）；不传，他们每次进游戏都会被再问一次（清单里有、文件下不到）');
+  if (need.some((p) => p.includes('/'))) {
+    const tgz = join(ROOT, 'hot-upload.tar.gz');
+    const r = spawnSync(`tar -czf "${tgz}" -C "${dir}" .`, { shell: true });
+    if (r.status === 0) console.log(`      这次有子目录里的文件：也可以只传 ${tgz} 再在面板里解压到 hot/`);
+  }
   process.exit(0);
 }
 
