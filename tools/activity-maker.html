@@ -58,8 +58,8 @@
     <div class="row">
       <label>活动</label>
       <select id="kind">
-        <option value="mass-commission">大量委托</option>
-        <option value="balloon-festival">宝可翻牌</option>
+        <option value="mass-bounty">大量悬赏</option>
+        <option value="poke-flip">宝可翻牌</option>
       </select>
     </div>
     <div class="row" id="rowPerTier">
@@ -75,7 +75,7 @@
     <div class="row">
       <label>闪光蛋物种</label>
       <input type="text" id="egg" placeholder="留空 = 随机" />
-      <span class="hint">图鉴编号，如 0133（伊布）；大量委托的第四档、宝可翻牌兑换所那两颗蛋都用它</span>
+      <span class="hint">图鉴编号，如 0133（伊布）；大量悬赏的第四档、宝可翻牌兑换所那两颗蛋都用它</span>
     </div>
     <div class="row" style="margin: 16px 0 0;">
       <button id="gen">生成（from = 现在）</button>
@@ -103,10 +103,9 @@
 // 固定奖励四档（客户端 src/activities.js 里摇，这里只是说明给作者看）
 //   ① 进化道具 ×1  ② 薄荷/王冠 ×1  ③ 大师球 / 闪耀护符 ×1  ④ 闪光蛋 ×1
 const FORM_KEY = 'pokeidle_activity_form_v1';
-const EVENTS_ENDPOINT = 'https://pokeidle.shiliu.space/api/events/';
 const $ = (id) => document.getElementById(id);
 const FIELDS = ['kind', 'perTier', 'hours', 'egg'];
-const DEFAULTS = { kind: 'mass-commission', perTier: 3, hours: 168, egg: '' };
+const DEFAULTS = { kind: 'mass-bounty', perTier: 3, hours: 168, egg: '' };
 
 function readForm() {
   return {
@@ -136,33 +135,16 @@ function fmt(ms) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// 大量委托：目标宝可梦从服务器排期里自动取"这段时间范围内中间那一场"大量出没，整段订进 payload.target。
-// 不取头一场 —— 头一场可能在玩家看到活动之前就结束了；取中间的，玩家有时间进场再抓。
-// 订住以后客户端就不用再看排期了（排期只留今天+明天，不订的话隔天翻页目标会换一只）。
-// 奖励另用一个种子 payload.seed 摇：改它只换奖励，不动目标。
-// 宝可翻牌：不用排期，payload.seed 决定兑换所那颗闪光蛋的物种（也是全服同一只）。
-async function build() {
+// 所有随机都由 payload.seed 决定：客户端用同一个 seed 定"固定哪一只"（全野池随机、去神兽）
+// 和四档奖励 —— 全服完全一致，改 seed 就换一只、换一份奖励，不用读排期。
+function build() {
   const f = readForm();
   const from = Date.now();                      // from 就是按下的这一刻
   const to = from + f.hours * 3600 * 1000;
   const payload = { seed: (from ^ Math.floor(Math.random() * 0xffffffff)) >>> 0 };
-  let note = '';
-  if (f.kind === 'mass-commission') {
-    const res = await fetch(`${EVENTS_ENDPOINT}?t=${from}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`读排期失败 HTTP ${res.status}`);
-    const mass = ((await res.json()).mass || []).slice().sort((a, b) => a.from - b.from);
-    const cands = mass.filter((s) => s.to > from && s.from < to);
-    if (!cands.length) throw new Error('这段时间的排期里没有大量出没');
-    const slot = cands[Math.floor(cands.length / 2)];
-    payload.perTier = f.perTier;
-    payload.target = { from: slot.from, pos: slot.pos, seed: slot.seed };   // 决定目标（排期里那一场）
-    note = `目标 = ${fmt(slot.from)} 那场大量出没；换奖励就改 payload.seed，目标不受它影响`;
-  }
+  if (f.kind === 'mass-bounty') payload.perTier = f.perTier;
   if (f.egg) payload.eggSpecies = f.egg.padStart(4, '0');
-  return {
-    text: JSON.stringify({ list: [{ id: f.kind, from, to, payload }] }),
-    note,
-  };
+  return { text: JSON.stringify({ list: [{ id: f.kind, from, to, payload }] }) };
 }
 
 $('gen').addEventListener('click', async () => {
@@ -171,13 +153,15 @@ $('gen').addEventListener('click', async () => {
   btn.disabled = true;
   $('genHint').textContent = '正在生成…';
   try {
-    const { text, note } = await build();
+    const { text } = build();
     $('json').value = text;
     const f = readForm();
     const from = Date.now();
     $('outTitle').textContent = `生成的 JSON（${fmt(from)} 起，到 ${fmt(from + f.hours * 3600e3)} 止）`;
     $('out').hidden = false;
-    $('genHint').textContent = note || '宝可翻牌：payload.seed 决定兑换所那颗闪光蛋的物种，改它换一颗';
+    $('genHint').textContent = $('kind').value === 'mass-bounty'
+      ? '目标与四档奖励都由 payload.seed 决定（目标从全野池随机、去神兽）：改 seed 换一只、换一份奖励'
+      : '宝可翻牌：payload.seed 决定兑换所那颗闪光蛋的物种，改它换一颗';
   } catch (e) {
     $('genHint').textContent = `生成失败：${e.message}（点「生成」重试）`;
   } finally { btn.disabled = false; }
@@ -190,8 +174,8 @@ $('copy').addEventListener('click', async () => {
 });
 $('reset').addEventListener('click', () => { writeForm(DEFAULTS); saveForm(); $('out').hidden = true; });
 FIELDS.forEach(id => $(id).addEventListener('change', saveForm));
-// 「每档只数」只对大量委托有意义，选宝可翻牌时收起来
-function syncRows() { $('rowPerTier').style.display = $('kind').value === 'mass-commission' ? '' : 'none'; }
+// 「每档只数」只对大量悬赏有意义，选宝可翻牌时收起来
+function syncRows() { $('rowPerTier').style.display = $('kind').value === 'mass-bounty' ? '' : 'none'; }
 $('kind').addEventListener('change', syncRows);
 
 loadForm();

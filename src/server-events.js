@@ -29,11 +29,6 @@ export function nextSlot(kind) {
   const t = serverNow();
   return listOf(kind).find((s) => s.from > t) || null;
 }
-// 排期里与 [from, to) 有交集的段（活动用它挑"活动期间固定那一只"）
-export function slotsIn(kind, from, to) {
-  if (!_schedule) return [];
-  return listOf(kind).filter(s => s.to > from && s.from < to).sort((a, b) => a.from - b.from);
-}
 export function scheduleExhausted() {
   const all = _schedule ? [...listOf('mass'), ...listOf('twist')] : [];
   if (!all.length) return true;

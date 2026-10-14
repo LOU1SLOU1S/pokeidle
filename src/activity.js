@@ -90,6 +90,47 @@ function loadActivitiesFromCache() {
 // 发布构建 DEV=false，这段不会生效。
 const DEV_PREVIEW = DEV ? (Object.keys(ACTIVITIES)[0] || null) : null;
 
+// 开发用的"本地预览活动"：把某个活动当成正在开，用假窗口 + 可覆盖的 payload，
+// 这样开发新玩法时不用去改服务器上那份真实活动。控制台：__act('poke-flip')
+const DEV_KEY = 'pokeidle_activity_dev';
+function devPreview() {
+  if (!DEV) return null;
+  try {
+    const o = JSON.parse(localStorage.getItem(DEV_KEY) || 'null');
+    return o && o.id && ACTIVITIES[o.id] ? o : null;
+  } catch (_) { return null; }
+}
+// 登记 / 取消本地预览（登记时刻存下来：重载刷新不会因为窗口变了把活动存档槽重置）
+export function setDevPreview(id, opts = {}) {
+  if (!id) {
+    localStorage.removeItem(DEV_KEY);
+    console.log('[限时活动] 本地预览已取消');
+  } else if (!ACTIVITIES[id]) {
+    console.log(`[限时活动] 不认识这个活动：${id}；可用：${Object.keys(ACTIVITIES).join(' / ')}`);
+    return null;
+  } else {
+    const old = devPreview();
+    const keepFrom = opts.reset || old?.id !== id ? 0 : old.from;
+    const o = { id, from: keepFrom || Date.now(), hours: Number(opts.hours) || 24, payload: opts.payload || {} };
+    localStorage.setItem(DEV_KEY, JSON.stringify(o));
+    console.log(`[限时活动] 本地预览：${id}（${o.hours} 小时，payload ${JSON.stringify(o.payload)}）${opts.reset ? '，存档槽已重置' : ''}`);
+  }
+  refreshEntry();
+  if (_open) reopenActivity();
+  return devPreview();
+}
+// 本地预览的假窗口：开始时刻固定，结束按 hours 顺延，免得开发到一半活动"过期"
+function devWin(di) {
+  const from = di.from || Date.now();
+  return { from, to: Math.max(from + (di.hours || 24) * 3600e3, Date.now() + 3600e3) };
+}
+// 这个 id 该用哪条记录：本地预览优先（同一个 id 也走假窗口和覆盖后的 payload）
+function entryOf(id) {
+  const di = devPreview();
+  if (di && di.id === id) return { id, payload: di.payload || {}, dev: true };
+  return (_list || []).find(x => x.id === id) || { id, payload: {} };
+}
+
 // 调试快照：控制台执行 __activity() 看当前活动状态（登记在 debug.js）
 export function activityDebug() {
   const now = serverNow();
@@ -106,6 +147,7 @@ export function activityDebug() {
     就绪: Object.keys(ACTIVITIES).map(id => ({ id, ready: readyOf(id, ACTIVITIES[id]) })),
     入口亮着: ($('bagActivity')?.classList.contains('bag-slot--empty') === false),
     开发预览: DEV_PREVIEW,
+    本地预览: devPreview(),
   };
 }
 function hhmmss(ms) {
@@ -133,6 +175,7 @@ export function reopenActivity() {
 // 一个会话内固定不变——窗口每次都变的话会把活动存档槽来回重置
 let _previewWin = null;
 function winOf(a, id) {
+  if (a && a.dev) return devWin(devPreview() || {});
   if (a && a.from) return { from: a.from, to: a.to };
   if (id !== DEV_PREVIEW) return null;
   if (!_previewWin) _previewWin = { from: Date.now() - 3600000, to: Date.now() + 86400000 };
@@ -143,7 +186,7 @@ function winOf(a, id) {
 // 注意要把窗口传进去 —— ready 里要按活动窗口去排期里找那一段
 function readyOf(id, mod) {
   if (!mod.ready) return true;
-  const a = (_list || []).find(x => x.id === id) || { id, payload: {} };
+  const a = entryOf(id);
   const win = winOf(a, id);
   if (!win) return false;
   try { return !!mod.ready(ctxFor(a, win)); }
@@ -156,8 +199,9 @@ function refreshEntry() {
   const slot = $('bagActivity');
   if (!slot) return;
   const list = activeActivities().filter(a => readyOf(a.id, ACTIVITIES[a.id]));
+  const di = devPreview();
   const preview = DEV_PREVIEW && readyOf(DEV_PREVIEW, ACTIVITIES[DEV_PREVIEW]) ? { id: DEV_PREVIEW } : null;
-  const entry = list[0] || preview;
+  const entry = di && readyOf(di.id, ACTIVITIES[di.id]) ? { id: di.id } : (list[0] || preview);
   const icon = $('bagActivityIcon');
   const nameEl = $('bagActivityName');
   if (!entry) {
@@ -183,11 +227,12 @@ function refreshEntry() {
 }
 
 function openActivity(id) {
-  const a = (_list || []).find(x => x.id === id);
   const mod = ACTIVITIES[id];
   const view = $('activityView');
   if (!mod || !view) return;
-  if (!a && id !== DEV_PREVIEW) return;   // 清单里没有、也不是开发预览：不打开
+  const a = entryOf(id);
+  const known = !!(_list || []).find(x => x.id === id);
+  if (!known && id !== DEV_PREVIEW && !a.dev) return;   // 清单里没有、也不是开发预览/本地预览：不打开
   if (!readyOf(id, mod)) return;          // 条件不满足（比如拿不到排期）：不打开
   _open = id;
   _openMod = mod;
@@ -200,7 +245,7 @@ function openActivity(id) {
   _bodyTimer = setInterval(() => {
     const cur = (_list || []).find(x => x.id === _open);
     if (!_openWin || serverNow() >= _openWin.to) { closeActivity(); return; } // 到点：自动退回首页
-    if (_open !== DEV_PREVIEW && !cur) { closeActivity(); return; }           // 被下架：同上
+    if (_open !== DEV_PREVIEW && !cur && !(devPreview() || {}).id) { closeActivity(); return; }   // 被下架：同上
     if (!readyOf(_open, _openMod)) { closeActivity(); return; }               // 条件不满足了：收起
     tickActivity();
   }, 1000);
@@ -209,7 +254,7 @@ function openActivity(id) {
 function closeActivity() {
   if (_bodyTimer) { clearInterval(_bodyTimer); _bodyTimer = null; }
   if (_openMod && _openMod.unmount) {
-    try { _openMod.unmount($('activityBody'), ctxFor((_list || []).find(x => x.id === _open) || { id: _open, payload: {} }, _openWin)); } catch (_) {}
+    try { _openMod.unmount($('activityBody'), ctxFor(entryOf(_open), _openWin)); } catch (_) {}
   }
   _open = null;
   _openMod = null;
@@ -295,7 +340,7 @@ function paintActivity() {
   const body = $('activityBody');
   if (!body || !_openMod) return;
   const ctx = currentCtx();
-  // 标题：活动可以自己拼（大量委托会把目标宝可梦接在后面，如"大量委托-皮卡丘"）；
+  // 标题：活动可以自己拼（大量悬赏会把目标宝可梦接在后面，如"大量悬赏-皮卡丘"）；
   // 中间那格是活动自己的徽标（气球之类），不占正文高度
   const titleEl = $('activityTitle');
   if (titleEl) {
@@ -318,7 +363,7 @@ function paintActivity() {
 }
 
 function currentCtx() {
-  return ctxFor((_list || []).find(x => x.id === _open) || { id: _open, payload: {} }, _openWin);
+  return ctxFor(entryOf(_open), _openWin);
 }
 
 // 每秒只走 tick（活动自己判断内容有没有变）+ 刷倒计时；不整页重画，才不会打断动图立绘

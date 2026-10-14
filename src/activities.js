@@ -4,12 +4,10 @@
 // 能用的东西都在 ctx 里（见 activity.js 的 ctxFor）：from / to / payload / slot / left / grant / take / confirm / save / refresh。
 // 约定：改游戏状态一律走 ctx（grant / take），别的地方只读。
 
-import { getPokemonByIndex, gameData, allPokemon, isPowerForm, isPokemon, POKEMON_NATURES } from './state.js';
+import { getPokemonByIndex, gameData, allPokemon, isPowerForm, isPokemon, isWildExcluded, POKEMON_NATURES } from './state.js';
 import { tryLoadImage, tryLoadPokemonImage } from './ui.js';
-import { itemIconSrc, MINT_KEYS } from './items.js';
+import { itemIconSrc, MINT_KEYS, pickFamilyBySeed } from './items.js';
 import { ITEM_NAMES, EVO_PRICES, eggSprite } from './config.js';
-import { massSpeciesOf } from './events.js';
-import { slotsIn } from './server-events.js';
 import { MG_LEVELS, levelOf } from './memory-game.js';
 
 const TIERS = 4;      // 四档：进化道具 / 薄荷·王冠 / 大师球·闪耀护符 / 闪光蛋
@@ -18,32 +16,23 @@ const TIER_NAMES = ['奖励1', '奖励2', '奖励3', '奖励4'];
 const perTierOf = ctx => Math.max(1, Number(ctx.payload && ctx.payload.perTier) || PER_TIER);
 const tiersDone = ctx => Math.min(TIERS, Math.max(0, Number(ctx.slot && ctx.slot.tiers) || 0));
 
-// 活动期间固定那一只：生成活动时从排期里把那一场整段订进 payload.target，
-// 之后排期怎么翻页都不变；没订（老配置）就退回从窗口内的排期里现取。
-// 取中间那一场，不取头一场 —— 头一场可能在玩家看到活动之前就结束了。
-function targetSlot(ctx) {
-  const t = (ctx.payload || {}).target;
-  if (t && typeof t.pos === 'number' && typeof t.seed === 'number') {
-    return { from: Number(t.from) || 0, pos: t.pos, seed: t.seed };
-  }
-  const list = slotsIn('mass', ctx.from, ctx.to);
-  if (!list.length) return null;
-  return list[Math.floor(list.length / 2)];
+// 活动固定那一只：由活动种子从"全野池"里挑 —— 全服同一只，而且它在自己地区的路边池里
+// 本来就会正常刷新，玩家任何时段都能去抓（不用赶某一小时的出没）
+function wildPool() {
+  return allPokemon.filter(p => !p.legend && !isPowerForm(p) && !isWildExcluded(p));
 }
 function targetPoke(ctx) {
-  const slot = targetSlot(ctx);
-  const poke = slot ? massSpeciesOf(slot) : null;
-  return { slot, poke };
+  const poke = pickFamilyBySeed(wildPool(), seedOf(ctx));   // 多变体家族先折一簇，再在簇内定一只
+  return poke && poke.index ? poke : null;
 }
 
-// 活动种子：payload.seed 这一个数决定奖励（同一份配置 → 全服同一份奖励），改它不动目标；
-// 老配置没有这个字段就退回按目标段摇，效果一样是"全服同一份"。
+// 活动种子：payload.seed 这一个数决定"目标是哪只 + 奖励是什么"（同一份配置 → 全服完全一致），
+// 改它就换一只、换一份奖励；老配置没写种子则退回用活动开始时刻，效果一样是全服同一份。
 function seedOf(ctx) {
   const raw = (ctx.payload || {}).seed;
   const n = Number(raw);
   const s = raw != null && raw !== '' && Number.isFinite(n) ? n : null;   // 手写配置里写成字符串也认
-  const slot = targetSlot(ctx);
-  const str = s != null ? `${ctx.id}|${s}` : `${ctx.id}|${slot ? slot.from : 0}|${slot ? slot.seed : 0}`;
+  const str = `${ctx.id}|${s != null ? s : Math.round(Number(ctx.from) || 0)}`;
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
@@ -123,11 +112,13 @@ function loadIcons(root) {
   });
 }
 
-// 挑提交用的个体：等级最低优先（再比个体值总和），锁定/蛋/已不在仓库的不算
+// 挑提交用的个体：只认"活动期间在路上抓到的"（孵蛋、交换来的都不算，
+// 否则饲育屋喂树果批量孵就能白拿）；等级最低优先（再比个体值总和），锁定/蛋/已不在仓库的不算
 const ivSum = p => ['hp', 'atk', 'def', 'spa', 'spd', 'spe'].reduce((s, k) => s + ((p.ivs || {})[k] || 0), 0);
-function submittable(species) {
+function submittable(species, from) {
   return (gameData?.roster || [])
-    .filter(p => String(p.species) === String(species) && isPokemon(p) && !p.locked && p.inRoster !== false)
+    .filter(p => String(p.species) === String(species) && isPokemon(p) && !p.locked && p.inRoster !== false
+      && p.source !== 'egg' && p.source !== 'trade' && (p.obtainedAt || 0) >= (from || 0))
     .sort((a, b) => (a.level || 1) - (b.level || 1) || ivSum(a) - ivSum(b));
 }
 
@@ -142,8 +133,8 @@ function slotHtml(ctx, i) {
 
 // 选择器的候选范围：只留能上交的（本种、未锁定、在仓库里），再扣掉别的槽位已经占用的
 function pickerExclude(ctx, slot) {
-  const { poke } = targetPoke(ctx);
-  const ok = new Set(poke ? submittable(poke.index).map(p => p.id) : []);
+  const poke = targetPoke(ctx);
+  const ok = new Set(poke ? submittable(poke.index, ctx.from).map(p => p.id) : []);
   const used = new Set(ctx.picks.filter((rid, i) => rid && i !== slot));
   return (gameData?.roster || [])
     .filter(p => !ok.has(p.id) || used.has(p.id))
@@ -191,10 +182,10 @@ function tierHtml(ctx, i, rw, per, done) {
     </div>`;
 }
 
-// ===== 宝可翻牌：玩配对翻牌赚气球，在兑换所换道具（每样限一次，换完即止）=====
+// ===== 宝可翻牌（id: poke-flip）：玩配对翻牌赚气球，在兑换所换道具（每样限一次，换完即止）=====
 const BALLOON_ICON = './items/goods/balloon-cyan.png';
 // 兑换表：价格按"一周活动能换完"配（合计 5800）；每样限一次，所以不用怕刷
-const FESTIVAL_SHOP = [
+const SHOP_ITEMS = [
   { id: 'ball',   price: 100,  qty: 10, name: '精灵球 ×10',       icon: 'poke-ball' },
   { id: 'honey',  price: 150,  qty: 1,  name: '甜甜蜜',           icon: 'sweet-honey' },
   { id: 'candy',  price: 150,  qty: 2,  name: '经验糖果 ×2',      icon: 'exp-candy' },
@@ -213,8 +204,8 @@ function boughtOf(ctx) {
   if (!ctx.slot.bought || typeof ctx.slot.bought !== 'object') ctx.slot.bought = {};
   return ctx.slot.bought;
 }
-// 兑换所那颗蛋：和大量委托同口径（可指定物种，否则按活动种子摇，全服同一只），定下来就存着
-function festivalEgg(ctx) {
+// 兑换所那颗蛋：和大量悬赏同口径（可指定物种，否则按活动种子摇，全服同一只），定下来就存着
+function shopEgg(ctx) {
   if (!ctx.slot.egg) {
     ctx.slot.egg = eggFrom(ctx, rngFrom(seedOf(ctx) ^ 0x9e3779b9));
     ctx.save();
@@ -222,12 +213,12 @@ function festivalEgg(ctx) {
   return ctx.slot.egg;
 }
 function shopName(ctx, item) {
-  return item.egg ? eggLabel(festivalEgg(ctx).species) : item.name;
+  return item.egg ? eggLabel(shopEgg(ctx).species) : item.name;
 }
 function shopRowHtml(ctx, item) {
   const bought = !!boughtOf(ctx)[item.id];
   const can = !bought && coinsOf(ctx) >= item.price;
-  const icon = item.egg ? eggIconHtml(festivalEgg(ctx).species) : itemIconHtml(item.icon);
+  const icon = item.egg ? eggIconHtml(shopEgg(ctx).species) : itemIconHtml(item.icon);
   return `
     <div class="act-shop-row${bought ? ' done' : ''}">
       ${icon}
@@ -236,8 +227,8 @@ function shopRowHtml(ctx, item) {
       <span class="catch-confirm-btn${can ? '' : ' off'}" data-buy="${item.id}">${bought ? '已兑换' : '兑换'}</span>
     </div>`;
 }
-function buyFestivalItem(ctx, id) {
-  const item = FESTIVAL_SHOP.find(x => x.id === id);
+function buyShopItem(ctx, id) {
+  const item = SHOP_ITEMS.find(x => x.id === id);
   if (!item) return;
   const bought = boughtOf(ctx);
   if (bought[item.id] || coinsOf(ctx) < item.price) return;
@@ -246,7 +237,7 @@ function buyFestivalItem(ctx, id) {
     if (bought[item.id] || coinsOf(ctx) < item.price) { ctx.refresh(); return; }
     const r = rngFrom(seedOf(ctx) + (Object.keys(bought).length + 1) * 7919);   // 随机的薄荷/进化道具：按种子顺着摇
     if (item.egg) {
-      const egg = festivalEgg(ctx);
+      const egg = shopEgg(ctx);
       ctx.grantEgg(egg.species, egg);
     } else if (item.id === 'mint') {
       ctx.grant(MINT_KEYS[Math.floor(r() * MINT_KEYS.length)], item.qty);
@@ -263,31 +254,32 @@ function buyFestivalItem(ctx, id) {
 }
 
 export const ACTIVITIES = {
-  // ---- 大量委托：活动期间固定一只宝可梦，每交 3 只领一档，四档共 12 只 ----
+  // ---- 大量悬赏（id: mass-bounty）：活动期间固定一只宝可梦，每交 3 只领一档，四档共 12 只 ----
   // 服务器 activity.json 里加一条：
-  // { "id": "mass-commission", "from": …, "to": …, "payload": { "seed": …, "target": {…}, "perTier": 3, "eggSpecies": "0133" } }
-  'mass-commission': {
-    name: '大量委托',
+  // { "id": "mass-bounty", "from": …, "to": …, "payload": { "seed": …, "perTier": 3, "eggSpecies": "0133" } }
+  // seed 决定"固定哪一只（全野池随机、去神兽）+ 四档奖励"，改 seed 就整份重摇
+  'mass-bounty': {
+    name: '大量悬赏',
     icon: './items/goods/balloon-red.png',   // 背包入口用的气球（每个活动一个颜色）
 
-    // 页头标题：活动名 + 当前目标（"大量委托-皮卡丘"）
+    // 页头标题：活动名 + 当前目标（"大量悬赏-皮卡丘"）
     title(ctx) {
-      const { poke } = targetPoke(ctx);
-      return poke ? `大量委托-${poke.form || poke.name}` : '大量委托';
+      const poke = targetPoke(ctx);
+      return poke ? `大量悬赏-${poke.form || poke.name}` : '大量悬赏';
     },
 
     // 拿不到排期就没法确定"固定那一只"，这种情况入口直接不显示
-    ready(ctx) { return !!targetPoke(ctx).poke; },
+    ready(ctx) { return !!targetPoke(ctx); },
 
     render(ctx) {
-      const { poke } = targetPoke(ctx);
+      const poke = targetPoke(ctx);
       const rw = rewardOf(ctx);
       const per = perTierOf(ctx);
       const done = tiersDone(ctx);
-      const have = poke ? submittable(poke.index).length : 0;
+      const have = poke ? submittable(poke.index, ctx.from).length : 0;
       return `
         <div class="act-hero">${pokeAnimHtml(poke.index, 48)}</div>
-        <p class="act-own">仓库里有 <b>${have}</b> 只</p>
+        <p class="act-own">活动期间在路上抓到 <b>${have}</b> 只</p>
         <div class="act-tiers">${Array.from({ length: TIERS }, (_, i) => tierHtml(ctx, i, rw, per, done)).join('')}</div>`;
     },
 
@@ -295,7 +287,7 @@ export const ACTIVITIES = {
       loadIcons(root);
       const per = perTierOf(ctx);
       const done = tiersDone(ctx);
-      const { poke } = targetPoke(ctx);
+      const poke = targetPoke(ctx);
       // 槽位：空位去仓库挑一只放进去，已放的再点一下取出
       root.querySelectorAll('.act-slot[data-slot]').forEach((el) => {
         el.addEventListener('click', () => {
@@ -309,12 +301,12 @@ export const ACTIVITIES = {
       if (!btn) return;
       const base = done * per;
       const ids = ctx.picks.slice(base, base + per);
-      const ok = new Set(submittable(poke.index).map(p => p.id));
+      const ok = new Set(submittable(poke.index, ctx.from).map(p => p.id));
       if (ids.length < per || ids.some(id => !ok.has(id))) return;   // 没凑齐 / 有失效的：按钮不接
       btn.addEventListener('click', () => {
         if (tiersDone(ctx) !== done) return;   // 页面重画前被连点：认准档位
         ctx.confirm(`上交这 ${per} 只「${poke.form || poke.name}」换${TIER_NAMES[done]}？上交后不可找回。`, () => {
-          if (!ctx.take(ids, `大量委托：${poke.name} ×${per}`)) { ctx.refresh(); return; }
+          if (!ctx.take(ids, `大量悬赏：${poke.name} ×${per}`)) { ctx.refresh(); return; }
           const rw = rewardOf(ctx);
           if (done < TIERS - 1) ctx.grant(rw.items[done], 1);
           else ctx.grantEgg(rw.egg.species, rw.egg);
@@ -328,8 +320,8 @@ export const ACTIVITIES = {
 
     // 每秒看一眼：换场/仓库/档位有变化才重画（容器已经在刷倒计时，这里不碰别的 DOM）
     tick(root, ctx) {
-      const { poke } = targetPoke(ctx);
-      const ok = new Set(poke ? submittable(poke.index).map(p => p.id) : []);
+      const poke = targetPoke(ctx);
+      const ok = new Set(poke ? submittable(poke.index, ctx.from).map(p => p.id) : []);
       // 槽位里那只被放生/进化了（id 变了）：直接清掉，别等提交时才失败
       for (let i = 0; i < ctx.picks.length; i++) if (ctx.picks[i] && !ok.has(ctx.picks[i])) ctx.picks[i] = null;
       const key = `${poke ? poke.index : '-'}|${ok.size}|${tiersDone(ctx)}|${seedOf(ctx)}|${ctx.picks.map(x => x || '-').join(',')}`;
@@ -337,10 +329,10 @@ export const ACTIVITIES = {
     },
   },
 
-  // ---- 宝可翻牌：靠配对翻牌赚气球，换道具（每样限一次）----
-  // 服务器 activity.json 里加一条 { "id": "balloon-festival", "from": …, "to": …,
+  // ---- 宝可翻牌（poke-flip）：靠配对翻牌赚气球，换道具（每样限一次）----
+  // 服务器 activity.json 里加一条 { "id": "poke-flip", "from": …, "to": …,
   //   "payload": { "seed": …, "eggSpecies": "0133" } }
-  'balloon-festival': {
+  'poke-flip': {
     name: '宝可翻牌',
     icon: BALLOON_ICON,
 
@@ -354,7 +346,7 @@ export const ACTIVITIES = {
           气球可以兑换下面的奖励，每样限一次。</div>
         <div class="act-levels">${MG_LEVELS.map(l => `<span class="act-level${l.id === lv.id ? ' on' : ''}" data-level="${l.id}">${l.name}<em>${l.time}秒 · ${l.tries}次</em></span>`).join('')}</div>
         <div class="act-actions"><span class="catch-confirm-btn" id="actPlay">开始游戏</span></div>
-        <div class="act-shop">${FESTIVAL_SHOP.map(it => shopRowHtml(ctx, it)).join('')}</div>`;
+        <div class="act-shop">${SHOP_ITEMS.map(it => shopRowHtml(ctx, it)).join('')}</div>`;
     },
 
     mount(root, ctx) {
@@ -375,7 +367,7 @@ export const ACTIVITIES = {
         }));
       });
       root.querySelectorAll('[data-buy]').forEach((btn) => {
-        btn.addEventListener('click', () => buyFestivalItem(ctx, btn.dataset.buy));
+        btn.addEventListener('click', () => buyShopItem(ctx, btn.dataset.buy));
       });
     },
 

@@ -5,6 +5,8 @@
 // 一局的随机（牌面顺序、金卡）用本地随机就够 —— 这里没有"全服同一份奖励"的问题，价格是固定的。
 import { $, showView, getCurrentView, tryLoadImage } from './ui.js';
 import { pushNav, popNav, allPokemon } from './state.js';
+import { foldFamilies } from './items.js';
+import { playMahjongSfx } from './audio.js';
 
 // 三档牌桌：对数 / 列数 / 通关基础币 / 时限（秒）/ 最多翻牌次数（一次 = 翻开两张）
 export const MG_LEVELS = [
@@ -16,19 +18,18 @@ export const levelOf = (id) => MG_LEVELS.find(l => l.id === id) || MG_LEVELS[1];
 
 let _g = null;   // 当前这一局
 
-// 从图鉴里抽 n 只不同的宝可梦当牌面（纯展示用）
-function pickFaces(n) {
-  const pool = allPokemon.filter(p => p.icon);
-  const out = [];
-  const used = new Set();
-  let guard = 0;
-  while (out.length < n && guard++ < 5000 && used.size < pool.length) {
-    const p = pool[Math.floor(Math.random() * pool.length)];
-    if (used.has(p.index)) continue;
-    used.add(p.index);
-    out.push(p);
+// 简单档固定这几只：颜色区别大的经典宝可梦，认得清、配得快
+const EASY_FACES = ['0025', '0004', '0007', '0001', '0039', '0094'];   // 皮卡丘 / 小火龙 / 杰尼龟 / 妙蛙种子 / 胖丁 / 耿鬼
+
+// 牌面：简单档用固定那几张；其余档先按家族聚类（同一只宝可梦的各种形态算一簇，
+// 阿尔宙斯那种不会两个变体同时上桌），再随机挑 n 簇、每簇随机取一个形态 —— 和大量出没同一套规则
+function pickFaces(n, lv) {
+  if (lv?.id === 'easy') {
+    const fixed = EASY_FACES.map(i => allPokemon.find(p => String(p.index) === i)).filter(p => p?.icon);
+    if (fixed.length >= n) return fixed.slice(0, n);
   }
-  return out;
+  const groups = foldFamilies(allPokemon.filter(p => p.icon));
+  return shuffled(groups).slice(0, n).map(g => g[Math.floor(Math.random() * g.length)]);
 }
 function shuffled(arr) {
   const a = arr.slice();
@@ -43,7 +44,7 @@ export function startMemoryGame(opts = {}) {
   const view = $('memoryView');
   if (!view) return;
   const lv = levelOf(opts.level);
-  const faces = pickFaces(lv.pairs);
+  const faces = pickFaces(lv.pairs, lv);
   if (faces.length < lv.pairs) return;
   _g = {
     lv,
@@ -116,6 +117,7 @@ function onBoardClick(e) {
   const i = Number(card.dataset.i);
   if (card.classList.contains('up') || card.classList.contains('matched')) return;
   if (_g.up.length === 0 && _g.tries >= _g.maxTries) { revealAllAndFinish('tries'); return; }   // 次数用完：这一手不给翻
+  playMahjongSfx('ui');   // 翻牌音效：和 21 点同款
   card.classList.add('up');
   _g.up.push(i);
   if (_g.up.length < 2) return;
@@ -182,7 +184,7 @@ function revealAllAndFinish(reason) {
 }
 
 // 结算：只有把整桌翻完才给气球（超时、翻牌次数用完、中途退出都是 0），只发一次。
-// reason：clear = 全部配对完 / time = 超时 / tries = 翻牌次数用完
+// reason：clear = 全部配对完 / time = 超时 / tries = 翻牌次数用完 / leave = 中途退出（不弹面板、不发声）
 function finish(reason) {
   if (!_g || _g.done) return;
   _g.done = true;
@@ -196,8 +198,11 @@ function finish(reason) {
     _g.coins = 0;
   }
   if (_g.onFinish) { try { _g.onFinish(_g.coins); } catch (e) { console.error('[宝可翻牌] 结算出错：', e); } }
+  if (reason !== 'leave') {   // 中途退出：静默作废，别在离开时还响一声
+    playMahjongSfx('ui');
+    showResult(reason);
+  }
   renderHead();
-  showResult(reason);
 }
 
 function showResult(reason) {
@@ -227,9 +232,9 @@ function showResult(reason) {
   };
 }
 
-// 离开牌桌：还没结算的按"超时"结算（币照给，一局只发一次），回活动页
+// 离开牌桌：还没结算的静默作废（币照给 0，一局只发一次），回活动页
 export function leaveMemoryGame() {
-  if (_g && !_g.done) finish('time');
+  if (_g && !_g.done) finish('leave');
   if (_g) { clearInterval(_g.timer); _g.timer = null; }
   _g = null;
   if (getCurrentView() !== 'memoryView') return;

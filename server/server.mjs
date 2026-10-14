@@ -41,7 +41,7 @@ if (!SALT) console.warn('[server] 未设置 TELEMETRY_SALT（仅限本地调试�
 // ---- 版本公告 ----
 // 客户端每次心跳带上自己的版本（`安装标识|版本|版本戳`），服务端记下见过的最新一份，
 // 并在响应里告诉这个客户端"你是不是旧的" —— 设置页据此显示（可更新）。
-// 想不等玩家先更新就公布，启动时钉一个即可：LATEST_VERSION=1.1.7 LATEST_STAMP=beta1
+
 const PIN_VER = process.env.LATEST_VERSION || '';
 const PIN_STAMP = process.env.LATEST_STAMP || '';
 const VER_RE = /^\d+(\.\d+){1,3}$/;
