@@ -174,6 +174,9 @@ window.__nextEncounter = (idx, shiny = false) => {
 };
 
 // 一键刷新：对战/交换/大量出没/时空扭曲/悬赏/商店每日限量货（只重置生成与倒计时，不改变当前位置）
+// 限时活动状态快照：拿到了哪些活动、哪些就绪、入口显不显示
+window.__activity = () => import('./activity.js').then(m => { const d = m.activityDebug(); console.log(d); return d; });
+
 window.__refreshAll = () => {
   const stock = clearDailyStock();
   refreshNpcs();

@@ -64,6 +64,18 @@ export function ensureMassInit() {
   }
 }
 
+// 排期段 → 这一场大量出没是哪只：位置定地区、种子定物种，全服一致。
+// 生成与活动（大量委托）共用这一份，保证两边永远是同一只。
+export function massSpeciesOf(slot) {
+  if (!slot || typeof slot.pos !== 'number' || typeof slot.seed !== 'number') return null;
+  const { edge, t } = edgeAtPos(slot.pos);
+  const regionName = REGION_CYCLE[t < 0.5 ? Math.min(edge[0], edge[1]) : Math.max(edge[0], edge[1])];
+  const pool = allPokemon.filter(p => p.region === regionName && !p.legend && !isPowerForm(p) && !isWildExcluded(p));
+  if (pool.length === 0) return null;
+  const poke = pickFamilyBySeed(pool, slot.seed);
+  return poke && poke.index ? poke : pickFamily(pool, () => 1);
+}
+
 // 随机生成一次事件
 function spawnMassOutbreak() {
   if (!gameData || gameData.massOutbreak?.active) return;
