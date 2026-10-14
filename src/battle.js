@@ -1254,22 +1254,27 @@ async function handoffFlee(isAuto) {
 
 // ===== 自动捕捉 =====
 // 智能选球：根据精灵捕获率与当前可用球，选出本次丢球用哪种球。
-// 闪光使用大师球（设置-自动捕捉）勾选后，闪光优先大师球，捕获率极高不逃跑
+// 设置-自动捕捉里的「闪光 / 神兽使用大师球」勾选后，这两类优先大师球（捕获率极高不逃跑）
 function pickAutoBallType(availableBalls) {
   const cr = currentEncounter?.catchRate ?? 1;
-  const shinyMaster = !!gameData.settings?.shinyMasterBall && !!currentIsShiny;
-  const variantMaster = !!gameData.settings?.variantMasterBall && !!_encounterVariant;
-  const preferred = (shinyMaster || variantMaster || currentEncounter?.legend)
+  // 两个「专供」开关：勾上任意一个就把大师球留给这几类，普通遭遇不再拿它兜底，
+  // 免得前两种球用光后把大师球丢在随手碰到的宝可梦身上。都不勾 = 老样子（大师球仍可兜底）
+  const shinyLegendOn = !!gameData.settings?.shinyLegendMasterBall;
+  const variantOn = !!gameData.settings?.variantMasterBall && !!_encounterVariant;
+  const reserve = shinyLegendOn || !!gameData.settings?.variantMasterBall;
+  const useMaster = (shinyLegendOn && (!!currentIsShiny || !!currentEncounter?.legend))
+    || variantOn
+    || !!currentEncounter?.legend; // 神兽保持老规矩：无条件优先大师球
+  const preferred = useMaster || cr <= 0.1
     ? ['master-ball', 'ultra-ball', 'poke-ball']
-    : cr <= 0.1
-    ? ['master-ball', 'ultra-ball', 'poke-ball']
-    : cr <= 0.5
-    ? ['ultra-ball', 'poke-ball', 'master-ball']
-    : ['poke-ball', 'ultra-ball', 'master-ball'];
+    : reserve
+    ? (cr <= 0.5 ? ['ultra-ball', 'poke-ball'] : ['poke-ball', 'ultra-ball'])
+    : (cr <= 0.5 ? ['ultra-ball', 'poke-ball', 'master-ball'] : ['poke-ball', 'ultra-ball', 'master-ball']);
   for (const b of preferred) {
     if (availableBalls.includes(b)) return b;
   }
-  return availableBalls[0] || null;
+  // 没球可用：勾了专供、这场又不值得动大师球 → 返回空，交给上层按"无球"自动逃跑；否则照老样子兜底
+  return reserve && !useMaster ? null : (availableBalls[0] || null);
 }
 
 // 单行策略判定：逃跑 > 暂停 > 未拥有 > 等级范围（skipLevel 行不参与等级筛选）
