@@ -163,7 +163,32 @@ export function showPhoneView() {
   if (isDualLayout()) showView('phoneView');
 }
 
-// 渲染并显示手机首页，并把 phoneView 压栈供返回
+// 右上角「可更新」：有资源待更新才显示（闪烁），点它弹更新对话框；取消也留着，下次还能点
+function updateHotBadge() {
+  const el = $('phoneUpdate');
+  if (!el) return;
+  import('./hot-update.js')
+    .then((m) => { el.style.display = m.hotPendingCount() > 0 ? '' : 'none'; })
+    .catch(() => { el.style.display = 'none'; });
+}
+// 双屏下手机页会被战斗屏的内层盖住，角标收不到 click：在文档捕获阶段按坐标判定
+function bindHotBadge() {
+  const el = $('phoneUpdate');
+  if (!el || el._wired) return;
+  el._wired = true;
+  document.addEventListener('pointerdown', (e) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width || e.clientX < r.left - 6 || e.clientX > r.right + 6
+      || e.clientY < r.top - 6 || e.clientY > r.bottom + 6) return;
+    e.preventDefault();
+    e.stopPropagation();
+    import('./hot-update.js')
+      .then((m) => { console.log('[热更] 角标命中，记录里的待更新数', m.hotPendingCount()); return m.openHotUpdateNotice(); })
+      .catch(() => {});
+  }, true);
+}
+window.addEventListener('hot-pending', updateHotBadge);
+
 // 手机页开着时重画一次（不压导航栈）
 export function refreshPhoneHome() {
   const el = $('phoneContent');
@@ -172,15 +197,18 @@ export function refreshPhoneHome() {
   return true;
 }
 
+// 渲染并显示手机首页，并把 phoneView 压栈供返回
 export function showPhoneHome() {
   pushNav('phoneView');
   startClock();
   installMusicEntry();
+  bindHotBadge();
   const el = $('phoneContent');
   paintPhoneHome(el);
 }
 
 function paintPhoneHome(el) {
+  updateHotBadge();
   // 分页：每页 PAGE_SIZE 个 App，横排平移翻页。活动 app 只在有活动时出现（名字/可见性由 activity.js 每 5 秒刷新）
   const apps = APPS.filter(a => a.id !== 'activity' || !!activityEntry());
   const pages = [];
@@ -208,20 +236,61 @@ function paintPhoneHome(el) {
   updateDispatchBadge();
   updateNurseryBadge();
   updatePhoneBadge();
-  // 翻页：页码指示点点击 + 原生 scroll-snap 横向滑动
+  // 翻页：页码指示点点击 + 手势拖动
   let _page = 0;
   const pagesEl = $('phonePages');
   const gotoPage = (i) => {
     _page = Math.max(0, Math.min(pages.length - 1, i));
-    // scroll-snap 容器按整页宽度吸附，浏览器原生计算，无需手动换算 padding/宽度
+    // 整页宽就是容器宽，目标位置 = 页码 × 容器宽
     pagesEl.scrollTo({ left: _page * pagesEl.clientWidth, behavior: 'smooth' });
     el.querySelectorAll('.phone-dots .dot').forEach((d, di) => d.classList.toggle('active', di === _page));
   };
   el.querySelectorAll('.phone-dots .dot').forEach(d => {
     d.addEventListener('click', () => gotoPage(Number(d.dataset.page)));
   });
-  // 触摸滑动翻页由 scroll-snap 原生处理；监听 scroll 结束同步页码圆点
+  // 触摸翻页：跟手拖动，抬手按方向翻一页
+  let _drag = null;
+  let _suppress = false;   // 划过页后挡掉手指底下那一下点击
+  pagesEl.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { _drag = null; return; }
+    const r = pagesEl.getBoundingClientRect();
+    // 整机是缩放过的，手指位移要折算回布局像素
+    _drag = { x: e.touches[0].clientX, y: e.touches[0].clientY, page: _page, dx: 0, axis: 0,
+      scale: (r.width / (pagesEl.offsetWidth || 1)) || 1 };
+  }, { passive: true });
+  pagesEl.addEventListener('touchmove', (e) => {
+    if (!_drag || e.touches.length !== 1) return;
+    const dx = (e.touches[0].clientX - _drag.x) / _drag.scale;
+    const dy = (e.touches[0].clientY - _drag.y) / _drag.scale;
+    if (!_drag.axis) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      _drag.axis = Math.abs(dx) > Math.abs(dy) ? 1 : -1;   // -1 = 纵向手势，交还给页面
+      if (_drag.axis < 0) { _drag = null; return; }
+    }
+    e.preventDefault();
+    _drag.dx = dx;
+    pagesEl.scrollLeft = _drag.page * pagesEl.clientWidth - dx;
+  }, { passive: false });
+  const endDrag = () => {
+    const w = pagesEl.clientWidth || 1;
+    const d = _drag;
+    _drag = null;
+    if (!d) {   // 纵向手势 / 多指：只把画面拉回最近一页
+      const idx = Math.round(pagesEl.scrollLeft / w);
+      if (idx !== _page) gotoPage(idx);
+      return;
+    }
+    if (d.axis > 0) {
+      _suppress = true;
+      setTimeout(() => { _suppress = false; }, 400);
+    }
+    gotoPage(d.page + (d.dx <= -w / 5 ? 1 : d.dx >= w / 5 ? -1 : 0));   // 只看这一次手势的方向，最多翻一页
+  };
+  pagesEl.addEventListener('touchend', endDrag);
+  pagesEl.addEventListener('touchcancel', endDrag);
+  // 拖动中圆点不跟着中间态闪
   pagesEl.addEventListener('scroll', () => {
+    if (_drag) return;
     const idx = Math.round(pagesEl.scrollLeft / (pagesEl.clientWidth || 1));
     if (idx !== _page) {
       _page = idx;
@@ -240,6 +309,7 @@ function paintPhoneHome(el) {
   }, { passive: false });
   // 事件委托：点击应用进入对应页面
   el.onclick = (e) => {
+    if (_suppress) return;
     const app = e.target.closest('.phone-app');
     if (!app) return;
     const id = app.dataset.app;
