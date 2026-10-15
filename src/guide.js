@@ -2,7 +2,10 @@
 // 第一次进某个页面时挡一层，依次高亮几个入口教玩家怎么用。位置用目标的 offset 布局像素写
 // （高亮环挂在它自己的定位父级里），跟整体缩放无关。新增引导只要往 GUIDES 里加一条。
 import { gameData, saveGame } from './state.js';
-import { logicViewport, popupBounds } from './ui.js';
+import { logicViewport, popupBounds, isUiMobile, viewportToLogic } from './ui.js';
+
+// 气泡与机身左右边缘留的安全区：不留的话贴边时文字会被切掉
+const BUBBLE_PAD = 12;
 
 const GUIDES = {
   // 宝可梦个体详情：三个道具入口
@@ -109,15 +112,24 @@ function start(cfg, targets) {
     // 气泡定位与 tooltip 同一套：用视口坐标 + logicViewport 换算，夹在机身 popupBounds 内
     const vr = logicViewport(el.getBoundingClientRect().left, el.getBoundingClientRect().top);
     const vr2 = logicViewport(el.getBoundingClientRect().right, el.getBoundingClientRect().bottom);
+    // 手游模式下 popupBounds 给的是屏幕坐标，而气泡的 left/top 是机身逻辑坐标：不折到同一套，
+    // 下面那两句"夹在机身内"就是摆设，气泡会从右边戳出去
+    let b = popupBounds();
+    if (isUiMobile()) {
+      const l1 = viewportToLogic(b.left, b.top);
+      const l2 = viewportToLogic(b.right, b.bottom);
+      b = { left: l1.x, top: l1.y, right: l2.x, bottom: l2.y };
+    }
+    bubble.style.width = '';   // 先按内容量一次自然宽（上一轮夹过的话要清掉）
     const bw0 = bubble.offsetWidth, bh0 = bubble.offsetHeight;
-    const b = popupBounds();
-    const bw = Math.min(bw0, b.right - b.left - 16);
-    bubble.style.left = `${Math.min(Math.max(vr.x + (vr2.x - vr.x) / 2 - bw / 2, b.left + 8), b.right - 8 - bw)}px`;
+    bubble.style.width = `${Math.min(bw0, b.right - b.left - BUBBLE_PAD * 2)}px`;   // 宽度也得真收进去
+    const bw = bubble.offsetWidth;   // 夹完之后的真实占位宽
+    bubble.style.left = `${Math.min(Math.max(vr.x + (vr2.x - vr.x) / 2 - bw / 2, b.left + BUBBLE_PAD), b.right - BUBBLE_PAD - bw)}px`;
     const belowTop = vr2.y + 10;
     const aboveTop = vr.y - 10 - bh0;
     let top = st.above ? aboveTop : belowTop;
-    if (top < b.top + 8) top = belowTop;                                  // 上方放不下 → 翻到下方
-    if (top + bh0 > b.bottom - 8) top = Math.max(b.top + 8, aboveTop);     // 下方放不下 → 翻到上方
+    if (top < b.top + BUBBLE_PAD) top = belowTop;                                  // 上方放不下 → 翻到下方
+    if (top + bh0 > b.bottom - BUBBLE_PAD) top = Math.max(b.top + BUBBLE_PAD, aboveTop);   // 下方放不下 → 翻到上方
     bubble.style.top = `${top}px`;
     bubble.style.transform = 'none';
   };

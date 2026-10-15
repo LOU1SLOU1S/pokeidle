@@ -339,6 +339,9 @@ export function getDefaultSave() {
     casinoGuideSeen: false,  // 游戏厅引导（赌桌/麻将桌/抽卡机/兑换）是否已看过
     trainGuideSeen: false,   // 训练场引导（纸箱/告示牌）是否已看过
     farmGuideSeen: false,    // 农场引导（纸箱/告示牌/地块）是否已看过
+    // 手机桌面布局：数组元素是 { app: 'gps' } 或 { folder: ['berry','mixer'] }，顺序即桌面顺序
+    // （App 的定义在 apps.js；这里只存位置，缺的应用渲染时自动补到末尾）
+    phoneLayout: [],
     settings: { autoCatch: false, autoFlee: true, windowPinned: true, backgroundService: false, autoCatchBalls: { 'poke-ball': true, 'ultra-ball': true, 'master-ball': false }, shinyStop: false, legendStop: false, autoBuffHoney: false, autoBuffCharm: false, autoRefill: false, autoRefillHoney: false, autoRefillCharm: false, autoRefillBalls: { 'poke-ball': true, 'ultra-ball': false, 'master-ball': false }, autoRefillOrder: ['poke-ball', 'ultra-ball', 'master-ball'], catchFilter: { rows: { normal: { action: 'catch', levelMin: 1, levelMax: 20, uncaughtOnly: false }, normalShiny: { action: 'catch', levelMin: 1, levelMax: 20, uncaughtOnly: false }, legend: { action: 'catch', levelMin: 1, levelMax: 20, uncaughtOnly: false }, legendShiny: { action: 'catch', levelMin: 1, levelMax: 20, uncaughtOnly: false } } }, gender: 'brendan', musicVolume: 0.6, musicEnabled: true },
   };
 }

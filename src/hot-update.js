@@ -214,14 +214,31 @@ export function hotPendingCount() {
   return meta ? (meta.pending || 0) : 0;
 }
 
-// 进游戏时只做一次静默的比对，不打扰玩家；有更新就在手机页右上角闪「可更新」
+// 玩家点「更新」：先落盘存档，再下载差异、重启交回 SW 提供新文件
+async function applyChanges(changes) {
+  try { window.__saveLastChance && window.__saveLastChance(); } catch (_) {}
+  const ui = showProgress();
+  const done = await download(changes, ui);
+  if (done > 0) location.reload();
+  else hideOverlay();
+}
+
+// 进游戏时只做一次静默的比对，不打扰玩家；有更新就在手机页右上角闪「可更新」。
+// 老外壳里没有那个角标（index.html 换不掉，包里那个 sw.js 也不认根路径），这时退回自动弹框
 export async function startHotUpdate() {
   if (_checking || !enabled()) return;
   _checking = true;
   try {
     await withTimeout(navigator.serviceWorker.register('./sw.js'), 10000);
     await withTimeout(navigator.serviceWorker.ready, 10000);
-    await findChanges();
+    const { ok, changes } = await findChanges();
+    if (ok && changes) {
+      if (document.getElementById('phoneUpdate')) {
+        window.dispatchEvent(new CustomEvent('hot-pending'));   // 让手机页把角标亮起来，点它才弹
+      } else {
+        askUpdate(changes, () => applyChanges(changes), () => hideOverlay());
+      }
+    }
   } catch (e) {
     console.warn('[热更] 出错（忽略，游戏照常跑）：', e && e.message);
   } finally {
@@ -243,13 +260,7 @@ export async function openHotUpdateNotice() {
     if (!ok) { toast(`检查更新失败：${reason}`); return; }
     if (!changes) { toast('资源已是最新'); return; }
     askUpdate(changes,
-      async () => {
-        try { window.__saveLastChance && window.__saveLastChance(); } catch (_) {}   // 重启前把存档同步落盘
-        const ui = showProgress();
-        const ok2 = await download(changes, ui);
-        if (ok2 > 0) { location.reload(); return; }            // 交给 SW 提供新文件
-        hideOverlay();
-      },
+      () => applyChanges(changes),
       () => hideOverlay());                                   // 取消：只关掉，角标留着下次再点
   } catch (e) {
     console.warn('[热更] 出错（忽略，游戏照常跑）：', e && e.message);
