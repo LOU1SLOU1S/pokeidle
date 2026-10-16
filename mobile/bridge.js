@@ -10,11 +10,11 @@ import { Share } from '@capacitor/share';
 const SAVE_PATH = 'save.json';
 const BACKUP_PATH = 'save.json.bak';
 
-async function readFileText(path) {
+async function readFileText(path, directory = Directory.Data) {
   try {
     const { data } = await Filesystem.readFile({
       path,
-      directory: Directory.Data,
+      directory,
       encoding: Encoding.UTF8,
     });
     return typeof data === 'string' && data ? data : null;
@@ -30,6 +30,12 @@ function readSave() {
 // 主存档写坏/写一半时的回退源：每次落盘前把上一份转存到这里
 function readSaveBackup() {
   return readFileText(BACKUP_PATH);
+}
+
+// 外部私有目录那份镜像（Android/data/<包名>/files/save.json）：游戏起不来、内部目录又没 root 取不到时，
+// 靠它把存档捞回来（adb pull 不需要 root，部分机型的文件管理器也能直接看到）
+function readSaveMirror() {
+  return readFileText(SAVE_PATH, Directory.External);
 }
 
 // 写入串行化：存档由 30 秒周期与多个事件同时触发，并发写会互相截断
@@ -52,6 +58,13 @@ function writeSave(data) {
       directory: Directory.Data,
       encoding: Encoding.UTF8,
     });
+    // 顺手镜像一份到外部私有目录：写失败不影响主档
+    await Filesystem.writeFile({
+      path: SAVE_PATH,
+      data,
+      directory: Directory.External,
+      encoding: Encoding.UTF8,
+    }).catch(() => {});
   });
   return writeChain;
 }
@@ -108,6 +121,7 @@ window.__POKEIDLE_MOBILE__ = {
   foregroundStop,
   setWindowBg,
   readSaveBackup,
+  readSaveMirror,
   writeSave,
   exportSave,
   shareImage,

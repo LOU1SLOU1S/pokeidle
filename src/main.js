@@ -908,6 +908,14 @@ async function init() {
         if (parsed && parsed.items) candidates.push(parsed);
       }
     } catch (_) {}
+    // 移动端外部目录镜像：内部档丢了（清数据/写坏）时靠它
+    try {
+      const mirrorRaw = await window.__POKEIDLE_MOBILE__?.readSaveMirror?.();
+      if (mirrorRaw) {
+        const parsed = JSON.parse(mirrorRaw);
+        if (parsed && parsed.items) candidates.push(parsed);
+      }
+    } catch (_) {}
     const local = localStorage.getItem('pokemon_idle_save');
     if (local) {
       const parsed = JSON.parse(local);

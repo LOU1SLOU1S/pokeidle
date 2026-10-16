@@ -1864,7 +1864,8 @@ export function toggleAutoBuffCharm() {
   }
 }
 
-// 闪光 / 神兽使用大师球：勾选后自动捕捉遇到闪光或神兽优先用大师球（神兽不再无条件吃大师球）
+// 闪光 / 神兽使用大师球：勾选后遇到闪光优先用大师球，同时把大师球留给闪光/神兽（普通遭遇不再拿它兜底）；
+// 神兽无论勾不勾都优先用大师球（老规矩）
 function toggleShinyLegendMasterBall() {
   ensureSettings();
   gameData.settings.shinyLegendMasterBall = !gameData.settings.shinyLegendMasterBall;
