@@ -5764,6 +5764,36 @@ html.mobile-app #quitHide { display: none !important; }
 .nursery-egg-row .pokedex-name .egg-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 闪光星标独立成项，名字截断时不被省略号吞掉 */
 .nursery-egg-row .pokedex-name .egg-shiny { flex-shrink: 0; margin-left: 2px; }
+/* 闪光蛋 / 6V 蛋的图标扫光：高光带在固定的蛋形遮罩里循环扫过。
+   遮罩取蛋图自身的透明通道，光只落在蛋身上；所以动的是 background-position，
+   而不是元素本身——元素一动遮罩就跟着偏了。
+   外壳尺寸由里面的蛋图撑开（列表 18px、槽位 22px 都能用） */
+.egg-icon-shine {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  line-height: 0;
+}
+.egg-icon-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.92) 50%, transparent 58%);
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  -webkit-mask-image: var(--egg-src);
+  mask-image: var(--egg-src);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: egg-shine-sweep 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes egg-shine-sweep {
+  0% { background-position: 85% 0; }
+  55%, 100% { background-position: 15% 0; }
+}
 /* 放入蛋列表只有两列：名字靠左、个体值靠右 */
 #incubatorEggView .nursery-egg-header .pokedex-name,
 #incubatorEggView .nursery-egg-row .pokedex-name { margin-right: auto; }
@@ -9192,6 +9222,27 @@ body.booting { visibility: hidden; }
   box-sizing: border-box;
 }
 .nursery-egg-page .list-scroll { overflow-x: hidden; }
+/* 蛋仓库右上角「收藏」按钮：贴搜索行右端，与其他小按钮同风格 */
+.nursery-egg-fav-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: inherit;
+  line-height: 1.5;
+  border: 1px solid rgba(var(--ui-color-rgb),0.25);
+  border-radius: 3px;
+  background: rgba(var(--ui-color-rgb),0.06);
+  color: var(--ui-color);
+  cursor: pointer;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .nursery-egg-fav-btn:hover { background: rgba(var(--ui-color-rgb),0.14); }
+}
+.nursery-egg-fav-btn:active { transform: scale(0.96); }
+/* 收藏页没有「丢弃」列，名字列撑开把个体值顶到右缘 */
+.nursery-egg-fav .nursery-egg-header .pokedex-name,
+.nursery-egg-fav .nursery-egg-row .pokedex-name { margin-right: auto; }
 /* 标题后跟的小字（目标蛋组） */
 .nursery-pick-egggroup {
   font-size: 10px;
