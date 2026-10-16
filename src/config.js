@@ -516,6 +516,10 @@ export const GACHA_TIER_WEIGHT = { N: 60, R: 32, SR: 8 };
 export const COIN_RATE = 20;           // 1 游戏币 = 多少糖果
 export const DEALER_STAND = 17;        // 庄家停牌点数
 export const BJ_MULT = 1.5;            // 黑杰克赔付倍率
+// 跳企鹅（二楼游戏机）
+export const PENGUIN_STEPS = 10;            // 浮冰跳数（跳到最右即走满）
+export const PENGUIN_BREAK_CHANCE = 0.22;   // 每跳浮冰碎裂概率（第一跳也算）
+export const PENGUIN_MULT = 1.25;           // 每跳成功的倍率（×1.25^n）
 
 // ===== 口袋麻将 =====
 export const HAND_SIZE = 8;            // 起手手牌数
