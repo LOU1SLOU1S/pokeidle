@@ -1386,12 +1386,13 @@ export function renderSettings(container, s) {
       btn.textContent = '导出中…';
       try {
         // 只有桥接明确回了 true 才算成功：面板上点了取消回 false；老版桥接没有返回值，
-        // 那种情况宁可不给提示，也不能瞎报成功
+        // 那种情况不猜结果，只把按钮复原
         const ok = await window.__POKEIDLE_MOBILE__.exportSave(JSON.stringify(gameData));
         if (ok === true) {
           flashSaveHint('存档已导出');
           btn.textContent = '已导出 ✓';
         } else {
+          if (ok === false) flashSaveHint('已取消导出');
           btn.textContent = '导出';
         }
       } catch (e) {
