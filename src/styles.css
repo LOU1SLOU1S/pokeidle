@@ -2900,13 +2900,15 @@ html.mobile-app #quitHide { display: none !important; }
 .phone-folder-grid .phone-app-name { font-size: 9px; }
 /* 窗口里的红点：描边用窗口底色，才是"从卡片上挖出来"的效果 */
 .phone-folder-grid .phone-app-badge { width: 7px; height: 7px; border-width: 1px; border-color: var(--phone-box, #e8dcc0); }
-/* 编辑态底部工具条：不压底色，按钮跟着应用图标一个配色（绿底白字） */
+/* 编辑态底部工具条：不压底色，按钮跟着应用图标一个配色（绿底白字）
+   层级压在通用确认条（.text-box，z-index 200）之下：俩按钮和确认条都在屏幕底部，
+   压在上面会把确认条的「确定/取消」挡住，想关确认条反而只能点到「完成」 */
 .phone-edit-bar {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 3000;
+  z-index: 150;
   display: flex;
   justify-content: space-between;
   gap: 8px;

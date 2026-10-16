@@ -31,10 +31,10 @@ const SCENE = {
   w: 11,
   h: 9,
   tiles: [
-    [{col:79,row:47},{col:74,row:45},{col:75,row:45},{col:76,row:50},{col:77,row:50},{col:78,row:50},{col:78,row:50},{col:79,row:50},{col:73,row:45},{col:74,row:45},{col:75,row:45}],
-    [{col:79,row:48},{col:74,row:42},{col:73,row:42},{col:76,row:51},{col:77,row:51},{col:78,row:51},{col:77,row:51},{col:79,row:51},{col:78,row:43},{col:79,row:43},{col:74,row:42}],
-    [{col:74,row:42},{col:74,row:42},{col:74,row:42},{col:76,row:52},{col:77,row:52},{col:78,row:52},{col:78,row:52},{col:79,row:52},{col:78,row:44},{col:79,row:44},{col:74,row:42}],
-    [{col:74,row:42},{col:74,row:42},{col:74,row:42},{col:76,row:53},{col:77,row:53},{col:78,row:53},{col:78,row:53},{col:80,row:46},{col:74,row:42},{col:74,row:42},{col:74,row:42}],
+    [{col:74,row:45},{col:74,row:45},{col:75,row:45},{col:76,row:50},{col:77,row:50},{col:78,row:50},{col:78,row:50},{col:79,row:50},{col:73,row:45},{col:74,row:45},{col:75,row:45}],
+    [{col:77,row:46},{col:74,row:42},{col:73,row:42},{col:76,row:51},{col:77,row:51},{col:78,row:51},{col:77,row:51},{col:79,row:51},{col:78,row:43},{col:79,row:43},{col:74,row:42}],
+    [{col:77,row:47},{col:79,row:46},{col:74,row:42},{col:76,row:52},{col:77,row:52},{col:78,row:52},{col:78,row:52},{col:79,row:52},{col:78,row:44},{col:79,row:44},{col:74,row:42}],
+    [{col:77,row:48},{col:79,row:46},{col:74,row:42},{col:76,row:53},{col:77,row:53},{col:78,row:53},{col:78,row:53},{col:80,row:46},{col:74,row:42},{col:74,row:42},{col:74,row:42}],
     [{col:74,row:42},{col:74,row:42},{col:74,row:46},{col:75,row:46},{col:77,row:43},{col:74,row:42},{col:74,row:42},{col:80,row:47},{col:81,row:47},{col:79,row:46},{col:74,row:42}],
     [{col:74,row:42},{col:78,row:46},{col:74,row:47},{col:75,row:47},{col:79,row:46},{col:74,row:42},{col:78,row:46},{col:80,row:48},{col:81,row:48},{col:73,row:42},{col:74,row:42}],
     [{col:74,row:42},{col:74,row:42},{col:74,row:48},{col:75,row:48},{col:77,row:45},{col:74,row:42},{col:73,row:42},{col:73,row:42},{col:81,row:49},{col:73,row:42},{col:74,row:42}],
@@ -42,6 +42,8 @@ const SCENE = {
     [{col:73,row:42},{col:73,row:42},{col:73,row:42},{col:73,row:42},{col:78,row:42},{col:79,row:41},{col:79,row:42},{col:73,row:42},{col:73,row:42},{col:73,row:42},{col:73,row:42}],
   ],
 };
+// 左上角柜台（还没做玩法）：只挂提示，不接点击
+const SCENE_SOON = { x: 0, y: 0, w: 2 * TILE, h: 4 * TILE };
 
 // ---------- 对局状态 ----------
 let _deck = [];      // 剩余牌堆
@@ -134,6 +136,8 @@ function renderScene() {
           style="left:${SCENE_GACHA2.x}px;top:${SCENE_GACHA2.y}px;width:${SCENE_GACHA2.w}px;height:${SCENE_GACHA2.h}px"></div>
         <div class="casino-scene-hot casino-coin-exchange" data-tip="兑换游戏币"
           style="left:${4*TILE}px;top:${1*TILE}px;width:${3*TILE}px;height:${2*TILE}px"></div>
+        <div class="casino-scene-hot" data-tip="敬请期待"
+          style="left:${SCENE_SOON.x}px;top:${SCENE_SOON.y}px;width:${SCENE_SOON.w}px;height:${SCENE_SOON.h}px"></div>
       </div>
     </div>`;
   const hots = box.querySelectorAll('.casino-scene-hot');
