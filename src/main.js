@@ -1,4 +1,9 @@
 // ===== 口袋挂机 - 入口模块 =====
+// 热更可能把安卓壳换成没注入 bridge 标签的 index.html（清单是按 src/ 生成的，源文件本来就没这个标签），
+// 一旦少了它，存档读写、导出分享全都会退化成网页版分支。这里兜底补上，重复执行有 __POKEIDLE_MOBILE__ 挡着
+if (window.Capacitor && !window.__POKEIDLE_MOBILE__) {
+  await import('./mobile-bridge.js').catch(() => {});
+}
 // 禁用全局右键菜单（桌面端 webview 的原生右键菜单）
 document.addEventListener('contextmenu', e => e.preventDefault());
 import { CATCH_RATES, SAVE_INTERVAL, ITEM_RATES, ITEM_NAMES, ROAD_SPECIAL_CHANCE, ROAD_WIDTH_MIN, ROAD_WIDTH_MAX, ROAD_SWITCH_CYCLES, BIKE_RESTORE_MAX_GAP_MS, PX_PER_METER, AUTO_CATCH_BALLS_DEFAULT } from './config.js';

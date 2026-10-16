@@ -1385,9 +1385,15 @@ export function renderSettings(container, s) {
     if (window.__POKEIDLE_MOBILE__?.exportSave) {
       btn.textContent = '导出中…';
       try {
-        await window.__POKEIDLE_MOBILE__.exportSave(JSON.stringify(gameData));
-        flashSaveHint('存档已导出');
-        btn.textContent = '已导出 ✓';
+        // 只有桥接明确回了 true 才算成功：面板上点了取消回 false；老版桥接没有返回值，
+        // 那种情况宁可不给提示，也不能瞎报成功
+        const ok = await window.__POKEIDLE_MOBILE__.exportSave(JSON.stringify(gameData));
+        if (ok === true) {
+          flashSaveHint('存档已导出');
+          btn.textContent = '已导出 ✓';
+        } else {
+          btn.textContent = '导出';
+        }
       } catch (e) {
         flashSaveHint('存档导出失败');
         btn.textContent = '导出失败';
