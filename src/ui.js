@@ -1,6 +1,6 @@
 // ===== UI 管理 =====
 import { phase, currentEncounter, gameData, saveGame, _fishing, _eggHatching, _navStack } from './state.js';
-import { formatNum, getCurrentRegion, getCurrentRoadInfo, anyIncubatorReady, getIncubatorUnlockCost, getMassOutbreak, getTwist, getRoadNumForEdge, getPokemonByIndex, isPokemon, genderBadge, effPerfectCount } from './state.js';
+import { formatNum, getCurrentRegion, getCurrentRoadInfo, anyIncubatorReady, getIncubatorUnlockCost, getMassOutbreak, getTwist, getRoadNumForEdge, getPokemonByIndex, isPokemon, genderBadge } from './state.js';
 import { ROAD_SPEED_WALK, ROAD_SPEED_RUN, ROAD_SPEED_BIKE, PX_PER_METER, eggSprite } from './config.js';
 import { formatLogTime } from './pokedex.js';
 import * as road from './road.js';
@@ -986,21 +986,20 @@ function slotEggSrc(s) {
   return eggSprite(poke?.types?.[0]);
 }
 
-// 蛋列表图标（蛋仓库 / 孵蛋器选蛋页共用）：闪光蛋 / 6V 蛋套一层壳加扫光，普通蛋就是原图。
+// 蛋列表图标（蛋仓库 / 孵蛋器选蛋页共用）：闪光蛋套扫光壳，6V 由个体值列高亮。
 // 扫光的遮罩取蛋图自身的透明通道（--egg-src），光只落在蛋身上、不铺满方形底色
 export function eggIconHtml(eg, poke) {
   const src = eggSprite(poke?.types?.[0]);
   const img = `<img class="roster-icon-img" src="${src}" alt="蛋" style="width:18px;height:18px;" />`;
-  return (eg.shiny || effPerfectCount(eg) >= 6) ? `<span class="egg-icon-shine" style="--egg-src:url('${src}')">${img}</span>` : img;
+  return eg.shiny ? `<span class="egg-icon-shine" style="--egg-src:url('${src}')">${img}</span>` : img;
 }
 
-// 槽位里的蛋图标：闪光 / 6V 的培育蛋套扫光壳；神秘蛋（eggRef 为空）结果未知，不加
+// 槽位里的蛋图标：闪光蛋套扫光壳；神秘蛋（eggRef 为空）结果未知，不加
 function slotEggImgHtml(s, shake) {
   const eggEntry = s && s.eggRef ? (gameData.roster || []).find(r => r.id === s.eggRef) : null;
   const src = slotEggSrc(s);
   const img = `<img src="${src}" alt="蛋"${shake ? ' class="shake"' : ''} />`;
-  const glow = eggEntry && (eggEntry.shiny || effPerfectCount(eggEntry) >= 6);
-  return glow ? `<span class="egg-icon-shine" style="--egg-src:url('${src}')">${img}</span>` : img;
+  return eggEntry && eggEntry.shiny ? `<span class="egg-icon-shine" style="--egg-src:url('${src}')">${img}</span>` : img;
 }
 
 // 六维个体值斜杠串：31/31/31/31/31/31（HP/攻击/防御/特攻/特防/速度，与繁殖页面一致；
@@ -1068,10 +1067,11 @@ function renderEggPickList() {
         : sorted.map(eg => {
             const poke = getPokemonByIndex(String(eg.species));
             const name = poke ? poke.name : `#${eg.species}`;
+            const iv = eggIvSlash(eg);
             return `
               <div class="pokedex-entry roster-row nursery-egg-row" data-egg-pick="${eg.id}">
-                <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋${eg.shiny ? ' ★' : ''}</span></span>
-                <span class="roster-iv">${eggIvSlash(eg)}</span>
+                <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
+                <span class="roster-iv${iv === '31/31/31/31/31/31' ? ' iv-perfect' : ''}">${iv}</span>
               </div>`;
           }).join('');
       // 重新绑定行点击
@@ -1113,10 +1113,11 @@ function renderEggPickList() {
           : sorted.map(eg => {
               const poke = getPokemonByIndex(String(eg.species));
               const name = poke ? poke.name : `#${eg.species}`;
+              const iv = eggIvSlash(eg);
               return `
                 <div class="pokedex-entry roster-row nursery-egg-row" data-egg-pick="${eg.id}">
-                  <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋${eg.shiny ? ' ★' : ''}</span></span>
-                  <span class="roster-iv">${eggIvSlash(eg)}</span>
+                  <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
+                  <span class="roster-iv${iv === '31/31/31/31/31/31' ? ' iv-perfect' : ''}">${iv}</span>
                 </div>`;
             }).join('')}
       </div>

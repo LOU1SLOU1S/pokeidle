@@ -5762,9 +5762,15 @@ html.mobile-app #quitHide { display: none !important; }
 }
 .nursery-egg-row .pokedex-name { display: flex; align-items: center; overflow: hidden; }
 .nursery-egg-row .pokedex-name .egg-name-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 6V 个体值与闪光星标共用同一套高亮色 */
+.nursery-egg-row .roster-iv.iv-perfect,
+.nursery-egg-row .pokedex-name .egg-shiny { color: var(--ui-color-darker); }
+.nursery-egg-row .roster-iv.iv-perfect { font-weight: 700; }
+[data-theme="dark"] .nursery-egg-row .roster-iv.iv-perfect,
+[data-theme="dark"] .nursery-egg-row .pokedex-name .egg-shiny { color: var(--ui-color); filter: brightness(1.45); }
 /* 闪光星标独立成项，名字截断时不被省略号吞掉 */
 .nursery-egg-row .pokedex-name .egg-shiny { flex-shrink: 0; margin-left: 2px; }
-/* 闪光蛋 / 6V 蛋的图标扫光：高光带在固定的蛋形遮罩里循环扫过。
+/* 闪光蛋的图标扫光：高光带在固定的蛋形遮罩里循环扫过。
    遮罩取蛋图自身的透明通道，光只落在蛋身上；所以动的是 background-position，
    而不是元素本身——元素一动遮罩就跟着偏了。
    外壳尺寸由里面的蛋图撑开（列表 18px、槽位 22px 都能用） */
