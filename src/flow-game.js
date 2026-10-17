@@ -6,29 +6,30 @@ import { $, showView, getCurrentView, tryLoadImage, tryLoadPokemonImage } from '
 import { pushNav, popNav, getPokemonByIndex } from './state.js';
 import { playMahjongSfx } from './audio.js';
 
-// 三档：盘面越大、单条线越长越难；通关给该难度的固定气球（与另外两个小游戏共用兑换所）
+// 三档：盘面越大、对数越多越难；通关给该难度的固定气球（与另外两个小游戏共用兑换所）。
+// 盘面尺寸受手机屏幕限制不再放大，难度靠对数拉开；奖励按实际用时压到与另外两个小游戏接近的水平
 export const FLOW_LEVELS = [
-  { id: 'easy', name: '简单', size: 5, flows: 4, minLen: 4, coins: 40 },
-  { id: 'normal', name: '普通', size: 6, flows: 5, minLen: 4, coins: 80 },
-  { id: 'hard', name: '困难', size: 7, flows: 6, minLen: 4, coins: 150 },
+  { id: 'easy', name: '简单', size: 5, flows: 4, minLen: 4, coins: 15 },
+  { id: 'normal', name: '普通', size: 6, flows: 6, minLen: 4, coins: 30 },
+  { id: 'hard', name: '困难', size: 7, flows: 7, minLen: 4, coins: 60 },
 ];
 export const flowLevelOf = (id) => FLOW_LEVELS.find((l) => l.id === id) || FLOW_LEVELS[1];
 
 // 配对池：外形同款、设定上互为一对的组合，每对配一个贴合本体的颜色（互不重复）
 const FLOW_PAIRS = [
-  { a: '0311', b: '0312', color: '#f0c22e' },   // 正电拍拍 / 负电拍拍
-  { a: '0313', b: '0314', color: '#8ec63f' },   // 电萤虫 / 甜甜萤
+  { a: '0311', b: '0312', color: '#ffea71' },   // 正电拍拍 / 负电拍拍
+  { a: '0313', b: '0314', color: '#6ca81a' },   // 电萤虫 / 甜甜萤
   { a: '0266', b: '0268', color: '#eef2f6' },   // 甲壳茧 / 盾甲茧
   { a: '0029', b: '0032', color: '#a35fc4' },   // 尼多兰 / 尼多朗
   { a: '0592', b: '0592-1', color: '#4fa3e3' }, // 轻飘飘 雄 / 雌
   { a: '0380', b: '0381', color: '#5566cc' },   // 拉帝亚斯 / 拉帝欧斯
   { a: '0337', b: '0338', color: '#e8943a' },   // 月石 / 太阳岩
-  { a: '0876', b: '0876-1', color: '#5b527b' }, // 爱管侍 雄 / 雌
+  { a: '0876', b: '0876-1', color: '#786ca6' }, // 爱管侍 雄 / 雌
   { a: '0678', b: '0678-1', color: '#4771d4' }, // 超能妙喵 雄 / 雌
   { a: '0282', b: '0475', color: '#d055a0' },   // 沙奈朵 / 艾路雷朵
   { a: '0010', b: '0384', color: '#2e9e4f' },   // 绿毛虫 / 烈空坐
   { a: '0196', b: '0197', color: '#7353af' }, // 太阳伊布 / 月亮伊布
-  { a: '0025', b: '0778', color: '#d6c036' },   // 皮卡丘 / 谜拟丘
+  { a: '0025', b: '0778', color: '#f0c22e' },   // 皮卡丘 / 谜拟丘
 ];
 const COIN_ICON = './items/goods/balloon-pink.png';
 
@@ -135,6 +136,7 @@ function buildBoard() {
   board.onpointerup = onUp;
   board.onpointercancel = onUp;
   board.onclick = onBoardClick;
+  board.oncontextmenu = (e) => e.preventDefault();   // 手机上长按别弹菜单打断拖拽
   _g.cellEls = [];
   for (let i = 0; i < _g.n * _g.n; i++) {
     const el = document.createElement('div');
@@ -197,24 +199,15 @@ function layout() {
 // 走过的格子直接铺色，端点格要等线真的拖过去才上色
 function paint() {
   if (!_g) return;
-  const { n } = _g;
-  const total = n * n;
+  const total = _g.n * _g.n;
   const colors = new Int8Array(total).fill(-1);
-  let covered = 0;
-  _g.paths.forEach((p, c) => {
-    covered += p.length;
-    for (const i of p) colors[i] = c;
-  });
+  _g.paths.forEach((p, c) => { for (const i of p) colors[i] = c; });
   for (let i = 0; i < total; i++) {
     const el = _g.cellEls[i];
     const c = colors[i];
     el.classList.toggle('on', c >= 0);
     el.style.backgroundColor = c >= 0 ? _g.colors[c] : '';
   }
-  let done = 0;
-  _g.paths.forEach((_, c) => { if (connected(c)) done++; });
-  const info = $('flInfo');
-  if (info) info.textContent = `已连 ${done}/${_g.paths.length} · 填充 ${covered}/${total}`;
 }
 
 function hexAlpha(hex, a) {
@@ -223,17 +216,22 @@ function hexAlpha(hex, a) {
 }
 
 function cellAt(clientX, clientY) {
-  if (!_g.cell) return -1;
+  if (!_g || !_g.cell) return -1;
   const board = $('flBoard');
-  const rect = board.getBoundingClientRect();
-  const col = Math.floor((clientX - rect.left - board.clientLeft) / _g.cell);
-  const row = Math.floor((clientY - rect.top - board.clientTop) / _g.cell);
+  // 机身整体会被 transform / zoom 缩放，指针是视口坐标、格子边长是布局坐标；
+  // 用未做 rect 补偿的 getClientRects 反推缩放比，两边才在同一套坐标里
+  const rect = board.getClientRects()[0];
+  if (!rect || !rect.width) return -1;
+  const scale = rect.width / board.offsetWidth;
+  const size = _g.cell * scale;
+  const col = Math.floor((clientX - rect.left - board.clientLeft * scale) / size);
+  const row = Math.floor((clientY - rect.top - board.clientTop * scale) / size);
   if (col < 0 || row < 0 || col >= _g.n || row >= _g.n) return -1;
   return row * _g.n + col;
 }
 
 function onDown(e) {
-  if (!_g || _g.done || _g.drag || e.button !== 0) return;   // 已有一根手指在画，别被第二根抢走
+  if (!_g || _g.done || _g.drag || (e.button !== 0 && e.pointerType !== 'touch')) return;   // 已有一根手指在画，别被第二根抢走
   const idx = cellAt(e.clientX, e.clientY);
   if (idx < 0) return;
   const color = _g.owner[idx];
@@ -260,6 +258,17 @@ function isEndOf(color, idx) {
   return idx === a || idx === b;
 }
 
+// 快速滑动时两次事件之间会跨过好几格：朝目标格一格一格补上，斜着走时先走偏差大的那根轴
+function stepToward(last, idx) {
+  const n = _g.n;
+  const dr = Math.floor(idx / n) - Math.floor(last / n);
+  const dc = (idx % n) - (last % n);
+  if (!dr && !dc) return -1;
+  if (!dr) return last + Math.sign(dc);
+  if (!dc) return last + Math.sign(dr) * n;
+  return Math.abs(dr) >= Math.abs(dc) ? last + Math.sign(dr) * n : last + Math.sign(dc);
+}
+
 function extend(idx) {
   if (idx < 0 || !_g.drag) return;
   const d = _g.drag;
@@ -275,18 +284,25 @@ function extend(idx) {
     return;
   }
   if (d.locked) return;   // 已经接上另一端：手没松之前只能往回退，不能继续往外长
-  const dc = Math.abs((idx % _g.n) - (last % _g.n));
-  const dr = Math.abs(Math.floor(idx / _g.n) - Math.floor(last / _g.n));
-  if (dc + dr !== 1) return;   // 只走上下左右
-  const owner = _g.owner[idx];
-  if (owner >= 0 && owner !== d.color) return;   // 被别的线（或别的端点）占着
-  p.push(idx);
+  // 相邻格直接走；跨格的（触屏划过太快）沿途中补齐，离太远就当成手指滑出盘面，不补
+  const dist = Math.abs(Math.floor(idx / _g.n) - Math.floor(last / _g.n)) + Math.abs((idx % _g.n) - (last % _g.n));
+  if (dist > 4) return;
+  for (let guard = 0; guard < 64; guard++) {
+    const from = p[p.length - 1];
+    if (from === idx) break;
+    const next = stepToward(from, idx);
+    if (next < 0) break;
+    const owner = _g.owner[next];
+    if (owner >= 0 && owner !== d.color) break;   // 被别的线（或别的端点）占着
+    p.push(next);
+    if (isEndOf(d.color, next)) {   // 接到自己的另一端：这条线完成，但先不锁住手势
+      d.locked = true;
+      playMahjongSfx('ui');
+      break;
+    }
+  }
   rebuildOwner();
   paint();
-  if (isEndOf(d.color, idx)) {   // 接到自己的另一端：这条线完成，但先不锁住手势
-    d.locked = true;
-    playMahjongSfx('ui');
-  }
 }
 
 function onMove(e) {
@@ -359,8 +375,6 @@ function showResult() {
     </div>`;
   board.appendChild(el);
   board.classList.add('done');
-  const info = $('flInfo');
-  if (info) info.textContent = '本局结束';
 }
 
 function onBoardClick(e) {
@@ -397,8 +411,6 @@ export function startFlowGame(opts = {}) {
     onFinish: opts.onFinish || null,
   };
   rebuildOwner();
-  const lvEl = $('flLevel');
-  if (lvEl) lvEl.textContent = `${lv.name} ${lv.size}×${lv.size}`;
   if (getCurrentView() !== 'flowView') pushNav('flowView');   // 再来一局时已经在棋盘上，别再压一层
   showView('flowView');
   buildBoard();

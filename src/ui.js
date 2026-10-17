@@ -276,7 +276,7 @@ export function showView(id) {
     title.innerHTML = '口袋挂机';
     title.dataset.action = '';
   } else {
-    const names = { phoneView:'手机', pokedexView:'图鉴', gpsView:'导航', bountyView:'地区悬赏', dataView:'统计', achievementView:'成就', shopView:'商店', settingsView:'设置', tutorialView:'教程', declarationView:'版权声明', systemLogView:'系统日志', incubatorView:'孵蛋器', incubatorEggView:'放入蛋', followerDexView:'随从图鉴', hatchView:'孵化', hatchAllView:'孵化全部', evoView:'进化', mixerView:'混合器', berryView:'农场', rosterView:'宝可梦', moveEditView:'配招', tradeView:'交换', battleView:'对战', teamView:'配队', trainView:'训练', nurseryView:'饲育屋', dispatchView:'派遣', casinoView:'游戏厅', casinoGameView:'21 点', casinoPenguinView:'跳企鹅', mahjongView:'口袋麻将', gachaView:'抽卡机', gachaHistoryView:'抽卡记录', casinoHistoryView:'战绩记录', albumView:'卡册', itemBoxView:'道具盒', musicView:'音乐', followerView:'随从', activityView:'限时活动', memoryView:'宝可翻牌', birdView:'鸟了个鸟', eventsView:'全服事件' };
+    const names = { phoneView:'手机', pokedexView:'图鉴', gpsView:'导航', bountyView:'地区悬赏', dataView:'统计', achievementView:'成就', shopView:'商店', settingsView:'设置', tutorialView:'教程', declarationView:'版权声明', systemLogView:'系统日志', incubatorView:'孵蛋器', incubatorEggView:'放入蛋', followerDexView:'随从图鉴', hatchView:'孵化', hatchAllView:'孵化全部', evoView:'进化', mixerView:'混合器', berryView:'农场', rosterView:'宝可梦', moveEditView:'配招', tradeView:'交换', battleView:'对战', teamView:'配队', trainView:'训练', nurseryView:'饲育屋', dispatchView:'派遣', casinoView:'游戏厅', casinoGameView:'21 点', casinoPenguinView:'跳企鹅', mahjongView:'口袋麻将', gachaView:'抽卡机', gachaHistoryView:'抽卡记录', casinoHistoryView:'战绩记录', albumView:'卡册', itemBoxView:'道具盒', musicView:'音乐', followerView:'随从', activityView:'限时活动', memoryView:'宝可翻牌', birdView:'鸟了个鸟', flowView:'宝可连线', eventsView:'全服事件' };
     title.innerHTML = `<svg style="width:16px;height:16px;vertical-align:middle;fill:var(--ui-color);transform:translateY(-1px);" viewBox="0 0 1024 1024"><use xlink:href="#icon-back"/></svg> ${names[chromeId]||''}`;
     title.dataset.action = 'back';
   }
@@ -1070,7 +1070,7 @@ function renderEggPickList() {
             const iv = eggIvSlash(eg);
             return `
               <div class="pokedex-entry roster-row nursery-egg-row" data-egg-pick="${eg.id}">
-                <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
+                <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}</span><span class="egg-name-suffix">的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
                 <span class="roster-iv${iv === '31/31/31/31/31/31' ? ' iv-perfect' : ''}">${iv}</span>
               </div>`;
           }).join('');
@@ -1116,7 +1116,7 @@ function renderEggPickList() {
               const iv = eggIvSlash(eg);
               return `
                 <div class="pokedex-entry roster-row nursery-egg-row" data-egg-pick="${eg.id}">
-                  <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
+                  <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}</span><span class="egg-name-suffix">的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
                   <span class="roster-iv${iv === '31/31/31/31/31/31' ? ' iv-perfect' : ''}">${iv}</span>
                 </div>`;
             }).join('')}

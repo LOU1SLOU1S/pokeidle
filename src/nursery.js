@@ -1775,7 +1775,7 @@ export function renderEggView() {
     const iv = eggIvSlash(eg);
     return `
       <div class="pokedex-entry roster-row nursery-egg-row" data-egg-id="${eg.id}">
-        <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
+        <span class="pokedex-name">${eggIconHtml(eg, poke)}<span class="egg-name-text">${name}</span><span class="egg-name-suffix">的蛋</span>${eg.shiny ? '<span class="egg-shiny">★</span>' : ''}</span>
         <span class="roster-iv${iv === '31/31/31/31/31/31' ? ' iv-perfect' : ''}">${iv}</span>
         ${_favView ? '' : eggDiscardCell(eg)}
       </div>`;
