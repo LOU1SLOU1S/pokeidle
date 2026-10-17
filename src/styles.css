@@ -2394,6 +2394,70 @@ html.mobile-app #quitHide { display: none !important; }
 .bg-result-coins.none { font-size: 11px; font-weight: 600; opacity: .75; }
 .bg-result-btns { display: flex; gap: 10px; margin-top: 4px; }
 
+/* === 宝可连线：按住成对宝可梦拖出线，铺满全盘且互不交叉 === */
+.fl-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 2px 2px 6px; font-size: 10.5px; color: var(--ui-color); opacity: .9;
+}
+.fl-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px 2px 4px; }
+.fl-board {
+  position: relative;
+  flex: none;
+  box-sizing: content-box;       /* 宽高由脚本按格子数算，别让边框吃掉 1px 导致网格和触摸错位 */
+  touch-action: none;            /* 拖线时别让页面跟着滚 */
+  background-color: rgba(var(--ui-color-rgb), 0.06);
+  background-image:
+    linear-gradient(to right, rgba(var(--ui-color-rgb), 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--ui-color-rgb), 0.16) 1px, transparent 1px);
+  border: 1px solid rgba(var(--ui-color-rgb), 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.fl-cell {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.fl-cell.on { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1); }
+.fl-end {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;   /* 手势统一交给棋盘处理 */
+  background-color: var(--fl-soft);
+}
+.fl-end img {
+  width: 78%; height: 78%; object-fit: contain; image-rendering: pixelated;
+}
+/* 通关：色块从中心向外依次弹一下，动效播完才弹结算面板 */
+.fl-cell.win {
+  animation: fl-cell-win .46s ease-out both;
+  animation-delay: calc(var(--fl-d) * 45ms);
+}
+@keyframes fl-cell-win {
+  0% { transform: scale(.86); }
+  55% { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+.fl-end.win img { animation: fl-end-win .55s ease-out both; }
+@keyframes fl-end-win {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+/* 电脑版：鼠标悬停时把脚下淡色加深一档（触屏设备不走这套） */
+@media (hover: hover) and (pointer: fine) {
+  .fl-board:not(.done) .fl-end { pointer-events: auto; }
+  .fl-board:not(.done) .fl-end:hover { background-color: var(--fl-hover); }
+  .fl-board:not(.done) { cursor: pointer; }
+}
+/* 结算面板盖在棋盘上：盘面已经铺满线，底色要实一点才看得清字 */
+.fl-board.done {
+  border-color: transparent;      /* 结算时不留棋盘的边线 */
+  background-image: none;
+  background-color: var(--screen-bg);   /* 补上边线位置的颜色，和结算面板连成一片 */
+}
+.fl-result { background: var(--screen-bg); border-radius: 3px; }
+
 /* 有音乐时压缩时间区域（上挤），app 图标位置保持不动 */
 #phoneView.has-music .phone-clock { padding: 0 0 2px; }
 #phoneView.has-music .phone-clock .date { font-size: 9px; }

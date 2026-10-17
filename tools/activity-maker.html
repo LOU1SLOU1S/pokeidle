@@ -61,6 +61,7 @@
         <option value="mass-bounty">大量悬赏</option>
         <option value="poke-flip">宝可翻牌</option>
         <option value="bird-stack">鸟了个鸟</option>
+        <option value="flow-link">宝可连线</option>
       </select>
     </div>
     <div class="row" id="rowPerTier">
@@ -76,7 +77,7 @@
     <div class="row">
       <label>闪光蛋物种</label>
       <input type="text" id="egg" placeholder="留空 = 随机" />
-      <span class="hint">图鉴编号，如 0133（伊布）；大量悬赏第四档、宝可翻牌与鸟了个鸟兑换所里的闪光蛋都用它</span>
+      <span class="hint">图鉴编号，如 0133（伊布）；大量悬赏第四档，以及宝可翻牌 / 鸟了个鸟 / 宝可连线兑换所里的闪光蛋都用它</span>
     </div>
     <div class="row" style="margin: 16px 0 0;">
       <button id="gen">生成（from = 现在）</button>
@@ -169,7 +170,9 @@ $('gen').addEventListener('click', async () => {
       ? '目标与四档奖励都由 payload.seed 决定（目标从全野池随机、去神兽）：改 seed 换一只、换一份奖励'
       : k === 'poke-flip'
         ? '宝可翻牌：payload.seed 决定兑换所那颗闪光蛋的物种，改它换一颗'
-        : '鸟了个鸟：不需要种子，但填了闪光蛋物种会带上 eggSpecies';
+        : k === 'flow-link'
+          ? '宝可连线：奖励固定的几件货由 payload.seed 摇，改它换一份；难度由玩家在活动页自选'
+          : '鸟了个鸟：不需要种子，但填了闪光蛋物种会带上 eggSpecies';
   } catch (e) {
     $('genHint').textContent = `生成失败：${e.message}（点「生成」重试）`;
   } finally { btn.disabled = false; }
@@ -182,7 +185,7 @@ $('copy').addEventListener('click', async () => {
 });
 $('reset').addEventListener('click', () => { writeForm(DEFAULTS); saveForm(); $('out').hidden = true; });
 FIELDS.forEach(id => $(id).addEventListener('change', saveForm));
-// 「每档只数」只对大量悬赏有意义，选宝可翻牌时收起来
+// 「每档只数」只对大量悬赏有意义，其余活动收起来
 function syncRows() { $('rowPerTier').style.display = $('kind').value === 'mass-bounty' ? '' : 'none'; }
 $('kind').addEventListener('change', syncRows);
 
